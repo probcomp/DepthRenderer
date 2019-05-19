@@ -5,8 +5,6 @@ using GLMakie.GLAbstraction
 using ModernGL
 import GLFW
 
-# TODO: make it work without GLFW
-
 # vertex shader
 const vertex_source = """
 #version 150
@@ -43,6 +41,7 @@ mutable struct Renderer
     vertices::Vector{Float32}
     indices::Vector{UInt32}
     window
+    show_in_window::Bool
     initialized::Bool
 end
 
@@ -50,13 +49,14 @@ function Renderer(
         vertices, indices;
         width=640, height=480,
         zfar=5., znear=0.1,
+        show_in_window=false,
         model=Matrix{Float64}(LinearAlgebra.I, 4, 4),
         view=Matrix{Float64}(LinearAlgebra.I, 4, 4),
         proj=simple_projection(znear, zfar))
     if zfar <= 0 || znear <= 0 || zfar < znear
         error("Invalid zfar and/or znear")
     end
-    Renderer(width, height, zfar, znear, model, view, proj, vertices, indices, Nothing, false)
+    Renderer(width, height, zfar, znear, model, view, proj, vertices, indices, Nothing, show_in_window, false)
 end
 
 function get_window(renderer::Renderer)
@@ -115,7 +115,7 @@ function init!(renderer::Renderer)
     renderer.window = window
     GLFW.MakeContextCurrent(window)
     # Retain keypress events
-    GLFW.SetInputMode(window, GLFW.STICKY_KEYS, GL_TRUE)
+    #GLFW.SetInputMode(window, GLFW.STICKY_KEYS, GL_TRUE)
 
     # create the Vertex Array Object (VAO) and make it current
     vao = Ref(GLuint(0))
@@ -177,15 +177,24 @@ function init!(renderer::Renderer)
     glViewport(0, 0, renderer.width, renderer.height)
 end
 
+function destroy(renderer::Renderer)
+    GLFW.DestroyWindow(renderer.window)
+end
+
 function render(renderer::Renderer)
     !renderer.initialized && error("Renderer not initialized")
     mvp_matrix = renderer.proj * renderer.view * renderer.model
     mvp_matrix_data = convert(Vector{Float32}, mvp_matrix[:]) # OpenGL expects column order
     # TODO need to call glUniformMatrix4fv every time, or can just change buffer directly?
     glUniformMatrix4fv(0, 1, GL_FALSE, Ref(mvp_matrix_data, 1))
-    glClearColor(0,0,0,0)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glDrawElements(GL_TRIANGLES, length(renderer.indices), GL_UNSIGNED_INT, Ref(renderer.indices, 1))
+    # NOTE: we don't swap buffers, so we aren't limited by the screen's refresh rate (60Hz)
+    if renderer.show_in_window
+        GLFW.SwapBuffers(renderer.window)
+    else
+        glFlush() 
+    end
 end
 
 function sillhouette(renderer::Renderer)
@@ -207,4 +216,4 @@ function depths(renderer::Renderer)
 end
 
 export Renderer, init!, render, depths, sillhouette
-export set_model_transform!, set_view_transform!, get_window
+export set_model_transform!, set_view_transform!, get_window, destroy
