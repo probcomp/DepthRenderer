@@ -3,7 +3,7 @@ using FileIO
 using Printf: @sprintf
 using Statistics: median, mean
 
-(vertices, indices) = load_mesh("mug_dec_small.obj")
+(vertices, indices) = load_mesh("mug.obj")
 println("number of vertices: $(length(vertices))")
 println("number of triangles: $(div(length(indices), 3))")
 
@@ -48,15 +48,18 @@ function do_rendering()
     return elapsed, depth_frames, sillhouette_frames
 end
 
+# force precompilation
 elapsed, depth_frames, sillhouette_frames = do_rendering()
+
+# profiled run
 using Profile
 Profile.clear()
 @profile elapsed, depth_frames, sillhouette_frames = do_rendering()
 
+# save images to files
 for (i, d) in enumerate(depth_frames)
     save(@sprintf("depth-%03d.png", i), d ./ maximum(d))
 end
-
 for (i, s) in enumerate(sillhouette_frames)
     save(@sprintf("sillhouette-%03d.png", i), s)
 end
