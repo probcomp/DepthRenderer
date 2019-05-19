@@ -10,6 +10,6 @@ JULIA_PROJECT=. julia example.jl
 ```
 
 Example frame rate:
-- 100x100 image, 190-triangle mesh, laptop graphics: 0.34 ms/frame.
+- 100x100 image, 190-triangle mesh, laptop graphics: 184 microseconds per frame (5,400 FPS).
 
 NOTE: If `show_in_window` is set to `True`, then frame rates will be limited by screen refresh rate (e.g. 16ms / frame).
