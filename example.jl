@@ -19,7 +19,6 @@ function do_rendering()
     n_frames = 1000
     elapsed = Vector{Float64}(undef, n_frames)
     depth_frames = []
-    sillhouette_frames = []
     for i=1:n_frames
         start = time_ns()
     
@@ -36,32 +35,27 @@ function do_rendering()
         
         render(renderer)
         
-        s = sillhouette(renderer)
         d = depths(renderer)
         
         elapsed[i] = (time_ns() - start) / 1e9
         push!(depth_frames, d)
-        push!(sillhouette_frames, s)
         i += 1
     end
 
-    return elapsed, depth_frames, sillhouette_frames
+    return elapsed, depth_frames
 end
 
 # force precompilation
-elapsed, depth_frames, sillhouette_frames = do_rendering()
+elapsed, depth_frames = do_rendering()
 
 # profiled run
 using Profile
 Profile.clear()
-@profile elapsed, depth_frames, sillhouette_frames = do_rendering()
+@profile elapsed, depth_frames = do_rendering()
 
 # save images to files
 for (i, d) in enumerate(depth_frames)
     save(@sprintf("depth-%03d.png", i), d ./ maximum(d))
-end
-for (i, s) in enumerate(sillhouette_frames)
-    save(@sprintf("sillhouette-%03d.png", i), s)
 end
 
 destroy(renderer)

@@ -42,6 +42,7 @@ mutable struct Renderer
     indices::Vector{UInt32}
     window
     show_in_window::Bool
+    enable_sillhouette::Bool
     initialized::Bool
 end
 
@@ -50,13 +51,14 @@ function Renderer(
         width=640, height=480,
         zfar=5., znear=0.1,
         show_in_window=false,
+        enable_sillhouette=false,
         model=Matrix{Float64}(LinearAlgebra.I, 4, 4),
         view=Matrix{Float64}(LinearAlgebra.I, 4, 4),
         proj=simple_projection(znear, zfar))
     if zfar <= 0 || znear <= 0 || zfar < znear
         error("Invalid zfar and/or znear")
     end
-    Renderer(width, height, zfar, znear, model, view, proj, vertices, indices, Nothing, show_in_window, false)
+    Renderer(width, height, zfar, znear, model, view, proj, vertices, indices, Nothing, show_in_window, enable_sillhouette, false)
 end
 
 function get_window(renderer::Renderer)
@@ -187,7 +189,11 @@ function render(renderer::Renderer)
     mvp_matrix_data = convert(Vector{Float32}, mvp_matrix[:]) # OpenGL expects column order
     # TODO need to call glUniformMatrix4fv every time, or can just change buffer directly?
     glUniformMatrix4fv(0, 1, GL_FALSE, Ref(mvp_matrix_data, 1))
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    if renderer.enable_sillhouette
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT) # only needed for sillhouette
+    else
+        glClear(GL_DEPTH_BUFFER_BIT)
+    end
     glDrawElements(GL_TRIANGLES, length(renderer.indices), GL_UNSIGNED_INT, Ref(renderer.indices, 1))
     # NOTE: we don't swap buffers, so we aren't limited by the screen's refresh rate (60Hz)
     if renderer.show_in_window
@@ -199,6 +205,7 @@ end
 
 function sillhouette(renderer::Renderer)
     !renderer.initialized && error("Renderer not initialized")
+    !renderer.enable_sillhouette && error("Sillhouette was not enabled")
     w, h = renderer.width, renderer.height
     data = Vector{UInt8}(undef, w * h)
     glReadPixels(0, 0, w, h, GL_LUMINANCE, GL_UNSIGNED_BYTE, Ref(data, 1))
