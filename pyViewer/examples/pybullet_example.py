@@ -4,7 +4,7 @@ import time
 import pybullet as pb
 import numpy as np
 import pyViewer.transformations as tf
-from pyViewer.viewer import CScene, CPointCloud, CNode, CTransform, CEvent, CImage
+from pyViewer.viewer import CScene, CPointCloud, CNode, CTransform, CEvent, CImage, CGLFWWindowManager
 from pyViewer.geometry_makers import make_mesh
 from pyViewer.models import REFERENCE_FRAME_MESH, FLOOR_MESH
 from pyViewer.pybullet_utils import init_physics, load_simulation, update_pybullet_nodes, make_pybullet_scene
@@ -44,7 +44,7 @@ def pybullet_example():
     # Visualizer initialization
     #####################################################
     # Load scene
-    scene = CScene(name='IL::SSR::VU Probabilistic Computing. javier.felip.leon@intel.com')
+    scene = CScene(name='Intel Labs::SSR::VU Depth Renderer. javier.felip.leon@intel.com', width=800, height=600, window_manager = CGLFWWindowManager())
 
     # Example reference frame size 1.0
     nodes1 = CNode(geometry=make_mesh(scene.ctx, REFERENCE_FRAME_MESH, scale=1.0))
@@ -95,10 +95,21 @@ def pybullet_example():
         update_pybullet_nodes(pybullet_nodes, physicsClientId=sim_id)
         timings["update_poses"] = time.time() - tic
 
+        tic = time.time()
+        # TODO: Fix the draw line shader
+        # scene.draw_line(np.array([0, 0, 0], np.float32), np.array([1, 1, 1], np.float32), np.array([1, 0, 0, 1], np.float32), 5)
+
+        scene.clear()
+        scene.draw()
+        scene.swap_buffers()
+
+        timings["draw"] = time.time() - tic
+
+        tic = time.time()
         # scene.camera.alpha = time.time() * 0.2
         # scene.camera.camera_matrix = scene.camera.look_at(scene.camera.focus_point, scene.camera.up_vector)
         depth_image = scene.get_depth_image()
-        image_cm = np.uint8(cm.hot(depth_image/scene.far) * 255)
+        image_cm = np.uint8(cm.viridis(depth_image/scene.far) * 255.0)
         # image_bw = np.uint8(depth_image / scene.far * 255)
         # texture_image = Image.frombytes("L", depth_image.shape, image_bw)
         texture_image = Image.frombytes("RGBA", depth_image.shape, image_cm)
@@ -111,25 +122,20 @@ def pybullet_example():
         # depth_shape = depth_image.shape
         # depth_image = depth_image.reshape(-1, order="C")
         # depth_image = np.flip(depth_image.reshape(depth_shape, order="F"), 1)
-
-        tic = time.time()
-        scene.clear()
-
-        scene.draw_line(np.array([0, 0, 0], np.float32), np.array([1, 1, 1], np.float32), np.array([1, 0, 0, 1], np.float32), 5)
+        timings["read_depth"] = time.time() - tic
 
         # TODO: BUG. If the text draw is not called inmediately before a scene.draw() the color does not work
         mouse_x = int(scene.wm.get_mouse_pos()[0])
         mouse_y = int(scene.wm.get_mouse_pos()[1])
         if 0 < mouse_x < depth_image.width and 0 < mouse_y < depth_image.height:
-            scene.draw_text("Depth (%d, %d): %f" % (mouse_x, mouse_y, depth_image.getpixel((mouse_x, mouse_y))), (20, 60), (1.0, 1.0, 0.0))
-        scene.draw_text(repr(timings), (20, 20), (1.0, 1.0, 0.0))
-
-        scene.draw()
-
-        timings["draw"] = time.time() - tic
+            # TODO: Fix direct mode calls in text rendering
+            # scene.draw_text("Depth (%d, %d): %f" % (mouse_x, mouse_y, depth_image.getpixel((mouse_x, mouse_y))), (20, 60), (1.0, 1.0, 0.0))
+            print("Depth (%d, %d): %f" % (mouse_x, mouse_y, depth_image.getpixel((mouse_x, mouse_y))))
+        # TODO: Fix direct mode calls in text rendering
+        # scene.draw_text(repr(timings), (20, 20), (1.0, 1.0, 0.0))
 
         timings["all"] = time.time() - t_ini
-        print(timings)
+        # print(timings)
 
 
 if __name__ == "__main__":

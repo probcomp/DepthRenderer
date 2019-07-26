@@ -563,6 +563,7 @@ class CGLFWWindowManager(CWindowManager):
 
     def draw(self):
         self.window.swap_buffers()
+        # self.window.show()
 
     def set_window_mode(self, size, options=None):
         self.window.size = size
@@ -586,10 +587,12 @@ class CScene(object):
         self.width = width
         self.height = height
 
-        self.fbo = self.ctx.simple_framebuffer((self.width, self.height))
-        self.wm = window_manager
-        self.wm.fbo = self.fbo
+        self.renderbuff = self.ctx.renderbuffer((self.width, self.height))
+        self.depthbuff = self.ctx.depth_renderbuffer((self.width, self.height))
+        self.fbo = self.ctx.framebuffer(color_attachments=[self.renderbuff], depth_attachment=self.depthbuff)
         self.fbo.use()
+
+        self.wm = window_manager
 
         self.init_display(name, width, height, location)
 
@@ -626,7 +629,6 @@ class CScene(object):
         self.width = width
         self.height = height
         self.wm.set_window_mode((self.width, self.height), options=options)
-
         self.wm.set_window_name(name)
 
     def swap_buffers(self):
@@ -711,17 +713,16 @@ class CScene(object):
 
     def draw(self):
         self.ctx.viewport = (0, 0, self.width, self.height)
-        # glViewport(0, 0, self.width, self.height)
         aspect = self.width / float(self.height)
         self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV / aspect, self.near, self.far)
 
         self.ctx.enable(mgl.BLEND)
         self.ctx.enable(mgl.DEPTH_TEST)
         self.root.draw(self.perspective, self.camera.camera_matrix, np.eye(4), self.render_mode)
-        # self.swap_buffers()
 
     # TODO: Enable camera facing text rendering
     # TODO: Enable 2D text scaling
+    # TODO: Avoid direct mode calls
     def draw_text(self, text, pos, color=(1, 1, 1), line_height=20):
         position = list(pos[0:2])
         if not self.glut_init:
@@ -767,19 +768,22 @@ class CScene(object):
         zFar = self.far
         zNear = self.near
 
-        depth_buffer = np.frombuffer(
-            self.fbo.read(viewport=self.ctx.viewport, components=1, dtype='f4', attachment=-1),
-            dtype=np.dtype('f4')).reshape(self.height, self.width)
+        try:
+            depth_buffer = np.frombuffer(
+                self.fbo.read(viewport=self.ctx.viewport, components=1, dtype='f4', attachment=-1),
+                dtype=np.dtype('f4')).reshape(self.width, self.height)
+            z_ndc = depth_buffer * 2.0 - 1.0  # Convert back to Normalized Device Coordinates [0,1] -> [-1,1]
+            if self.depth_mode == self.depth_modes_linear:
+                depth_image = z_ndc * (zFar - zNear) + zNear  # Linear inverse depth
+            elif self.depth_mode == self.depth_modes_nonlinear:
+                depth_image = (2.0 * zNear * zFar) / (zFar + zNear - z_ndc * (zFar-zNear))  # Non-linear inverse depth
+            else:
+                raise Exception("Invalid depth mode")
+            return depth_image
 
-        z_ndc = depth_buffer * 2.0 - 1.0  # Convert back to Normalized Device Coordinates [0,1] -> [-1,1]
-        if self.depth_mode == self.depth_modes_linear:
-            depth_image = z_ndc * (zFar - zNear) + zNear  # Linear inverse depth
-        elif self.depth_mode == self.depth_modes_nonlinear:
-            depth_image = (2.0 * zNear * zFar) / (zFar + zNear - z_ndc * (zFar-zNear))  # Non-linear inverse depth
-        else:
-            raise ValueError
-
-        return depth_image
+        except ValueError as e:
+            print(e)
+            return np.zeros((self.height, self.width))
 
     def process_event(self, event):
         self.camera.process_event(event)
@@ -806,7 +810,7 @@ class CScene(object):
             self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV/aspect, self.near, self.far)
             self.width = event.data[1]
             self.height = event.data[2]
-            glViewport(0, 0, self.width, self.height)
+            self.wm.viewport = (0, 0, self.width, self.height)
             print("Window resize (w:%d, h:%d)" % (event.data[1], event.data[2]), event.data[0])
 
     def __repr__(self):
@@ -886,13 +890,11 @@ class CPointCloud(object):
         self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, '3f 4f', 'in_vert', 'in_color')])
 
     def draw(self, mvp, mode=mgl.POINTS):
-        glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)
         self.prog['Mvp'].value = tuple(np.array(mvp, np.float32).reshape(-1, order='F'))
         self.prog['psize'].value = self.size
         if self.draw_mode is not None:
             mode = self.draw_mode
         self.vao.render(mode)
-        glDisable(GL_VERTEX_PROGRAM_POINT_SIZE)
 
     def __del__(self):
         if self.data is not None:
@@ -1040,7 +1042,7 @@ class CImage(CGeometry):
         self.texture.filter = (mgl.LINEAR_MIPMAP_LINEAR, mgl.LINEAR)
 
     def draw(self, mvp, mode=mgl.TRIANGLES):
-        glDisable(GL_DEPTH_TEST)
+        self.ctx.disable(mgl.DEPTH_TEST)
         tex_id = np.array(0, np.uint16)
         self.prog['Texture'].value = tex_id
         if self.texture is not None:
@@ -1049,4 +1051,4 @@ class CImage(CGeometry):
         if self.draw_mode is not None:
             mode = self.draw_mode
         self.vao.render(mode)
-        glEnable(GL_DEPTH_TEST)
+        self.ctx.enable(mgl.DEPTH_TEST)

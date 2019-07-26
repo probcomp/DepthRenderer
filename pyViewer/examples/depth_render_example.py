@@ -61,7 +61,7 @@ def depth_render_example(scene, camera_positions=[(0.7, 0.7, 2)], width=800, hei
 if __name__ == "__main__":
     scene = dict()
     # scene["meshes"] = ["models/YCB_Dataset/035_power_drill/tsdf/textured.obj"]
-    scene["meshes"] = ["models/duck/duck_vhacd.obj", "models/duck/duck_vhacd.obj"]
+    scene["meshes"] = ["../models/duck/duck_vhacd.obj", "../models/duck/duck_vhacd.obj"]
     scene["translations"] = [(0, 0, 0), (0, 0.2, 0)]
     scene["rotations"] = [(0, 0, 0), (0, 0, 0.707)]
 
@@ -86,5 +86,5 @@ if __name__ == "__main__":
     for i, img in enumerate(images):
         image_cm = np.uint8(cm.viridis(img / max_dist) * 255)
         pil_image = Image.frombytes("RGBA", img.shape, image_cm)
-        pil_image.save("depth_images/depth_%d.png" % i, "PNG")
+        pil_image.save("../depth_images/depth_%d.png" % i, "PNG")
     #     print("Save image: depth_images/depth_%d.png" % i)
