@@ -13,7 +13,7 @@ os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
 os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"
 
 
-def depth_render_example(scene, camera_positions=[(0.7, 0.7, 2)], width=800, height=600, show=False):
+def depth_render_example(scene, camera_positions=[(0.7, 0.7, 2)], width=100, height=100, camera_K=None, show=False):
     #####################################################
     # Visualizer initialization
     #####################################################
@@ -23,6 +23,10 @@ def depth_render_example(scene, camera_positions=[(0.7, 0.7, 2)], width=800, hei
         window_manager = CGLFWWindowManager()
 
     viz = CScene(name='Intel Labs::SSR::VU Depth Renderer. javier.felip.leon@intel.com', width=width, height=height, window_manager = window_manager)
+
+    if camera_K is not None:
+        viz.camera.set_intrinsics(width, height,
+                                  camera_K[0,0], camera_K[1,1], camera_K[0,2], camera_K[1,2], camera_K[0,1])
 
     # Load objects from the object list
     object_meshes = scene["meshes"]
@@ -68,16 +72,19 @@ if __name__ == "__main__":
     max_dist = 1.5
 
     cameras = list()
-    for i in range(1000):
+    for i in range(10000):
         cameras.append(np.random.uniform(low=(-np.pi, -np.pi, 0.1), high=(np.pi, np.pi, max_dist)))
 
-    # cameras = [(0.7, 0.7, 2), (0.7, 0.7, 1), (0.7, 0.7, 0.5), (0.7, 0.7, 0.2)]
+    # Example camera parameters (from a Realsense D435 camera @ VGA resolution)
+    K = np.array([[613.223, 0.      , 313.568],
+                  [0.     , 613.994 , 246.002],
+                  [0.     , 0.      , 1.0    ]])
 
     timings = list()
     n_exeuctions = 10
     for i in range(n_exeuctions):
         t_ini = time.time()
-        images = depth_render_example(scene, cameras, height=100, width=100, show=False)
+        images = depth_render_example(scene, cameras, height=480, width=640, show=False, camera_K=K)
         timings.append(time.time() - t_ini)
 
     print("Generated %d images in %3.3fs | %3.3ffps" % (len(cameras), np.mean(timings), len(cameras)/np.mean(timings)))

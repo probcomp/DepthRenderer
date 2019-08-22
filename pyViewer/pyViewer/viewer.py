@@ -178,7 +178,7 @@ class CTransform(object):
 
 
 class CCamera(object):
-    def __init__(self, alpha=0.7, beta=0.7, distance=2.0, focus=(0.0, 0.0, 0.0), up=(0.0, 0.0, 1.0)):
+    def __init__(self, alpha=0.7, beta=0.7, distance=2.0, focus=(0.0, 0.0, 0.0), up=(0.0, 0.0, 1.0), width=640, height=480, focal_px=620):
         self.r = distance
         self.alpha = alpha
         self.beta = beta
@@ -186,6 +186,20 @@ class CCamera(object):
         self.up_vector = np.array(up)
         self.camera_matrix = self.look_at(self.focus_point, self.up_vector)
         self.sensitivity = 0.02
+        self.focal_px = focal_px
+        self.set_intrinsics(width, height, focal_px, focal_px, width / 2, height / 2, 0)
+
+    def set_resolution(self, width, height):
+        self.set_intrinsics(width, height, self.focal_px, self.focal_px, width / 2, height / 2, self.s)
+
+    def set_intrinsics(self, width, height, fx, fy, cx, cy, skew):
+        self.s = skew
+        self.height = height
+        self.width = width
+        self.fx = fx
+        self.fy = fy
+        self.cx = cx
+        self.cy = cy
 
     #TODO: Remove pygame specific keys here
     def process_event(self, event):
@@ -600,17 +614,26 @@ class CScene(object):
         self.root = CNode(id=0, parent=None, transform=CTransform(), geometry=None, material=None)
         self.nodes = [self.root]
 
-        self.camera = CCamera()
+        self.camera = CCamera(width=width, height=height, focal_px=650)
         self.render_mode = mgl.TRIANGLES
 
-        aspect = self.width / float(self.height)
+        # aspect = self.width / float(self.height)
         self.near = near
         self.far = far
         self.depth_modes_nonlinear = 0
         self.depth_modes_linear = 1
         self.depth_mode = self.depth_modes_nonlinear
-        self.FoV = 60.0
-        self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV / aspect, near, far)
+        # self.FoV = 60.0
+        # self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV / aspect, near, far)
+
+        proj_matrix = self.compute_projection_matrix(self.camera.fx, self.camera.fy, self.camera.cx, self.camera.cy,
+                                                     self.near, self.far, self.camera.s)
+
+        ndc_matrix = self.compute_ortho_matrix(self.ctx.viewport[0], self.ctx.viewport[2],
+                                               self.ctx.viewport[1], self.ctx.viewport[3],
+                                               self.near, self.far)
+
+        self.perspective = np.matmul(ndc_matrix, proj_matrix)
 
         self.glut_init = False
 
@@ -644,36 +667,53 @@ class CScene(object):
         return self.wm.set_window_mode(size, options)
 
     @staticmethod
-    def compute_ortho_matrix(near, far, w, h):
+    def compute_ortho_matrix(left, right, bottom, top, near, far):
         ortho = np.eye(4)
-        ortho[0, 0] = 2 / w
-        ortho[1, 1] = 2 / h
+        ortho[0, 0] = 2 / (right-left)
+        ortho[1, 1] = 2 / (top-bottom)
         ortho[2, 2] = - 2 / (far - near)
+
+        ortho[0, 3] = - (right + left) / (right - left)
+        ortho[1, 3] = - (top + bottom) / (top - bottom)
         ortho[2, 3] = - (far + near) / (far - near)
         return ortho
 
-    def compute_perspective_matrix(self, fov_h, fov_v, near, far):
-        Sh = 1 / np.tan((fov_h/2.0) * (np.pi/180.0))
-        Sv = 1 / np.tan((fov_v / 2.0) * (np.pi / 180.0))
-        persp = np.eye(4)
-        persp[0, 0] = Sh
-        persp[1, 1] = Sv
+    # def compute_perspective_matrix(self, fov_h, fov_v, near, far):
+    #     Sh = 1 / np.tan((fov_h/2.0) * (np.pi/180.0))
+    #     Sv = 1 / np.tan((fov_v / 2.0) * (np.pi / 180.0))
+    #     persp = np.eye(4)
+    #     persp[0, 0] = Sh
+    #     persp[1, 1] = Sv
+    #
+    #     # Non-linear depth projection
+    #     if self.depth_mode == self.depth_modes_nonlinear:
+    #         persp[2, 2] = -(far + near) / (far - near)
+    #         persp[2, 3] = -(2.0 * far * near) / (far - near)
+    #
+    #     # Linear depth projection
+    #     elif self.depth_mode == self.depth_modes_linear:
+    #         persp[2, 2] = -2 / (far - near)        # Linearly scales depth to the [0,2] range
+    #         persp[2, 3] = -near                       # Shifts depth to normalized device coordinates [-1,1]
+    #     else:
+    #         raise ValueError
+    #
+    #     persp[3, 3] = 0.0
+    #     persp[3, 2] = -1
+    #     return persp
 
-        # Non-linear depth projection
-        if self.depth_mode == self.depth_modes_nonlinear:
-            persp[2, 2] = -(far + near) / (far - near)
-            persp[2, 3] = -(2.0 * far * near) / (far - near)
+    def compute_projection_matrix(self, fx, fy, cx, cy, near, far, skew=0):
+        proj = np.eye(4)
+        proj[0, 0] = fx
+        proj[1, 1] = fy
+        proj[0, 1] = skew
+        proj[0, 2] = -cx
+        proj[1, 2] = -cy
+        proj[2, 2] = near + far
+        proj[2, 3] = near * far
 
-        # Linear depth projection
-        elif self.depth_mode == self.depth_modes_linear:
-            persp[2, 2] = -2 / (far - near)        # Linearly scales depth to the [0,2] range
-            persp[2, 3] = -near                       # Shifts depth to normalized device coordinates [-1,1]
-        else:
-            raise ValueError
-
-        persp[3, 3] = 0.0
-        persp[3, 2] = -1
-        return persp
+        proj[3, 3] = 0.0
+        proj[3, 2] = -1
+        return proj
 
     def insert_graph(self, nodes):
         assert self.root is not None
@@ -711,14 +751,26 @@ class CScene(object):
                 del self.nodes[i]
                 break
 
-    def draw(self):
-        self.ctx.viewport = (0, 0, self.width, self.height)
-        aspect = self.width / float(self.height)
-        self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV / aspect, self.near, self.far)
+    def draw(self, camera=None):
+        if camera is None:
+            camera = self.camera
+
+        self.ctx.viewport = (0, 0, camera.width, camera.height)
+        # aspect = self.width / float(self.height)
+        # self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV / aspect, self.near, self.far)
+
+        proj_matrix = self.compute_projection_matrix(camera.fx, camera.fy, camera.cx, camera.cy,
+                                                     self.near, self.far, camera.s)
+
+        ndc_matrix = self.compute_ortho_matrix(self.ctx.viewport[0], self.ctx.viewport[2],
+                                               self.ctx.viewport[1], self.ctx.viewport[3],
+                                               self.near, self.far)
+
+        self.perspective = np.matmul(ndc_matrix, proj_matrix)
 
         self.ctx.enable(mgl.BLEND)
         self.ctx.enable(mgl.DEPTH_TEST)
-        self.root.draw(self.perspective, self.camera.camera_matrix, np.eye(4), self.render_mode)
+        self.root.draw(self.perspective, camera.camera_matrix, np.eye(4), self.render_mode)
 
     # TODO: Enable camera facing text rendering
     # TODO: Enable 2D text scaling
@@ -783,7 +835,7 @@ class CScene(object):
 
         except ValueError as e:
             print(e)
-            return np.zeros((self.height, self.width))
+            return np.zeros((self.width, self.height))
 
     def process_event(self, event):
         self.camera.process_event(event)
@@ -807,10 +859,11 @@ class CScene(object):
         if event.type == CEvent.VIDEORESIZE:
             self.wm.set_window_mode((event.data[1], event.data[2]))
             aspect = event.data[1] / float(event.data[2])
-            self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV/aspect, self.near, self.far)
+            # self.perspective = self.compute_perspective_matrix(self.FoV, self.FoV/aspect, self.near, self.far)
             self.width = event.data[1]
             self.height = event.data[2]
             self.wm.viewport = (0, 0, self.width, self.height)
+            self.camera.set_resolution(self.width, self.height)
             print("Window resize (w:%d, h:%d)" % (event.data[1], event.data[2]), event.data[0])
 
     def __repr__(self):
