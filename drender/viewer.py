@@ -21,7 +21,6 @@ REQUIREMENTS
 pip install ModernGL numpy PIL pywavefront
 pip install pyglfw              # Only for glfw window management (recommended)
 pip install pygame              # Only for pygame window management
-pip install pybullet            # Only needed for pybullet integration
 
 TODO:
 - Shadows
@@ -885,8 +884,6 @@ class CNode(object):
         self.t = transform
         self.geom = geometry
         self.mat = material
-        self.pybullet_id = None
-        self.pybullet_v_mat = np.eye(4)
         if parent is not None:
             self.set_parent(parent)
 

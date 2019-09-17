@@ -1,15 +1,6 @@
-# DepthRenderer
-Minimal OpenGL-based 3D depth renderer in Julia
+# drender
 
-![mug depth image](depth.png)
-![mug sillhouette](sillhouette.png)
+Simple OpenGL renderer for Python with a simple SceneGraph. 
+- Pygame, pyglfw3 or offscreen window managers.
 
-Try the example script:
-```julia
-JULIA_PROJECT=. julia example.jl
-```
-
-Example frame rate:
-- 100x100 image, 190-triangle mesh, laptop graphics: 184 microseconds per frame (5,400 FPS).
-
-NOTE: If `show_in_window` is set to `True`, then frame rates will be limited by screen refresh rate (e.g. 16ms / frame).
+Look at the examples folder for examples of usage.

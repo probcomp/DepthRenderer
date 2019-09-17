@@ -7,7 +7,7 @@ with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
 setuptools.setup(
-    name="PyViewer",
+    name="drender",
     version="0.0.1",
     install_requires=requirements,
     author="Javier Felip Leon",
@@ -15,7 +15,7 @@ setuptools.setup(
     description="Simple OpenGL viewer for python with a simple SceneGraph.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages = ['PyViewer'],
+    packages = ['drender'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
