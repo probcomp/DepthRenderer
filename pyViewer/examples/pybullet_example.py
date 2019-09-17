@@ -3,11 +3,11 @@ import os
 import time
 import pybullet as pb
 import numpy as np
-import pyViewer.transformations as tf
-from pyViewer.viewer import CScene, CPointCloud, CNode, CTransform, CEvent, CImage, CGLFWWindowManager
-from pyViewer.geometry_makers import make_mesh
-from pyViewer.models import REFERENCE_FRAME_MESH, FLOOR_MESH
-from pyViewer.pybullet_utils import init_physics, load_simulation, update_pybullet_nodes, make_pybullet_scene
+import PyViewer.transformations as tf
+from PyViewer.viewer import CScene, CPointCloud, CNode, CTransform, CEvent, CImage, CGLFWWindowManager
+from PyViewer.geometry_makers import make_mesh
+from PyViewer.models import REFERENCE_FRAME_MESH, FLOOR_MESH
+from PyViewer.pybullet_utils import init_physics, load_simulation, update_pybullet_nodes, make_pybullet_scene
 from matplotlib import cm
 from PIL import Image
 

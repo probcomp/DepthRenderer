@@ -1,6 +1,6 @@
 import numpy as np
 import pywavefront as pyobj
-from pyViewer.viewer import CGeometry
+from PyViewer.viewer import CGeometry
 
 
 def extract_vertex_data(mat, out_format="V3F_N3F_T2F_C4F", scale=1.0):

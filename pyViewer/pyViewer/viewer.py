@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import pyViewer.transformations as tf
+import PyViewer.transformations as tf
 import moderngl as mgl
 import PIL
 from PIL import Image
@@ -264,7 +264,13 @@ class CCamera(object):
             if event.data[2][2]:
                 pass
 
-    def look_at(self, focus=(0, 0, 0), up=(0, 0, 1)):
+    def look_at(self, focus=None, up=None):
+
+        if focus is None:
+            focus = self.focus_point
+
+        if up is None:
+            up = self.up_vector
 
         position = np.array([0.0, 0.0, 0.0])
         alpha = self.alpha
@@ -459,6 +465,7 @@ class CGLFWWindowManager(CWindowManager):
             os.sys.exit(1)
 
         pyglfw.Window.hint(visible=False)
+        # pyglfw.Window.hint(context_creation_api=EGL_CONTEXT_API)
         self.window = pyglfw.Window(200, 200, "")
         self.window.make_current()
         self.window.show()
@@ -684,19 +691,19 @@ class CScene(object):
     #     persp = np.eye(4)
     #     persp[0, 0] = Sh
     #     persp[1, 1] = Sv
-    #
+
     #     # Non-linear depth projection
     #     if self.depth_mode == self.depth_modes_nonlinear:
     #         persp[2, 2] = -(far + near) / (far - near)
     #         persp[2, 3] = -(2.0 * far * near) / (far - near)
-    #
+
     #     # Linear depth projection
     #     elif self.depth_mode == self.depth_modes_linear:
     #         persp[2, 2] = -2 / (far - near)        # Linearly scales depth to the [0,2] range
     #         persp[2, 3] = -near                       # Shifts depth to normalized device coordinates [-1,1]
     #     else:
     #         raise ValueError
-    #
+
     #     persp[3, 3] = 0.0
     #     persp[3, 2] = -1
     #     return persp
@@ -823,7 +830,7 @@ class CScene(object):
         try:
             depth_buffer = np.frombuffer(
                 self.fbo.read(viewport=self.ctx.viewport, components=1, dtype='f4', attachment=-1),
-                dtype=np.dtype('f4')).reshape(self.width, self.height)
+                dtype=np.dtype('f4')).reshape(self.height, self.width)
             z_ndc = depth_buffer * 2.0 - 1.0  # Convert back to Normalized Device Coordinates [0,1] -> [-1,1]
             if self.depth_mode == self.depth_modes_linear:
                 depth_image = z_ndc * (zFar - zNear) + zNear  # Linear inverse depth

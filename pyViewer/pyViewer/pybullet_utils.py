@@ -1,8 +1,8 @@
 import pybullet as p
-import pyViewer.transformations as tf
-from pyViewer.viewer import CTransform, CNode
-from pyViewer.geometry_makers import make_mesh
-from pyViewer.models import REFERENCE_FRAME_MESH
+import PyViewer.transformations as tf
+from PyViewer.viewer import CTransform, CNode
+from PyViewer.geometry_makers import make_mesh
+from PyViewer.models import REFERENCE_FRAME_MESH
 import numpy as np
 
 def init_physics(use_gui, timestep=0.01, physicsClientId=0):

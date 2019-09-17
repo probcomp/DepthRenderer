@@ -5,93 +5,53 @@ from matplotlib import cm
 from PIL import Image
 import numpy as np
 
-import pyViewer.transformations as tf
-from pyViewer.viewer import CScene, CNode, CTransform, COffscreenWindowManager, CGLFWWindowManager
-from pyViewer.geometry_makers import make_mesh
+import PyViewer.transformations as tf
+from PyViewer.viewer import CScene, CNode, CTransform, COffscreenWindowManager, CGLFWWindowManager
+from PyViewer.geometry_makers import make_mesh
+from PyViewer.depth_renderer import DepthRenderer
 
 os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
 os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"
 
 
-def depth_render_example(scene, camera_positions=[(0.7, 0.7, 2)], width=100, height=100, camera_K=None, show=False):
-    #####################################################
-    # Visualizer initialization
-    #####################################################
-    # Load scene
-    window_manager = COffscreenWindowManager()
-    if show:
-        window_manager = CGLFWWindowManager()
-
-    viz = CScene(name='Intel Labs::SSR::VU Depth Renderer. javier.felip.leon@intel.com', width=width, height=height, window_manager = window_manager)
-
-    if camera_K is not None:
-        viz.camera.set_intrinsics(width, height,
-                                  camera_K[0,0], camera_K[1,1], camera_K[0,2], camera_K[1,2], camera_K[0,1])
-
-    # Load objects from the object list
-    object_meshes = scene["meshes"]
-    object_translations = scene["translations"]
-    object_rotations = scene["rotations"]
-    for i in range(len(object_meshes)):
-
-        object_node = CNode(geometry=make_mesh(viz.ctx, object_meshes[i], scale=1.0),
-                            transform=CTransform(tf.compose_matrix(translate=object_translations[i], angles=object_rotations[i])))
-        viz.insert_graph([object_node])
-
-    #####################################################
-    # Image render loop
-    #####################################################               # FPS data on a i7-6700K CPU @ 4.00GHz + Titan X(Pascal)
-    # depth_images = np.zeros((len(camera_positions), width, height))   # 4200 FPS for a batch of 10K 100x100px imgs
-    depth_images = [np.zeros((width, height))] * len(camera_positions)  # 4580 FPS for a batch of 10K 100x100px imgs (256x256 795fps) (128x128 4026fps)
-    # depth_images = list()                                             # 4496 FPS for a batch of 10K 100x100px imgs
-    for i, cpos in enumerate(camera_positions):
-        # Move camera
-        cam = viz.camera
-        cam.alpha = cpos[0]
-        cam.beta = cpos[1]
-        cam.r = cpos[2]
-        cam.camera_matrix = cam.look_at(cam.focus_point, cam.up_vector)
-
-        # Clear scene and render
-        viz.clear()
-        viz.draw()
-        viz.swap_buffers()
-        depth_images[i] = viz.get_depth_image()
-        # depth_images.append(viz.get_depth_image())
-
-    return depth_images
-
-
 if __name__ == "__main__":
     scene = dict()
     # scene["meshes"] = ["models/YCB_Dataset/035_power_drill/tsdf/textured.obj"]
-    scene["meshes"] = ["../models/duck/duck_vhacd.obj", "../models/duck/duck_vhacd.obj"]
-    scene["translations"] = [(0, 0, 0), (0, 0.2, 0)]
-    scene["rotations"] = [(0, 0, 0), (0, 0, 0.707)]
+    # scene["meshes"] = ["../models/duck/duck_vhacd.obj", "../models/duck/duck_vhacd.obj"]
+    # scene["poses"] = [(0, 0, 0, 0, 0, 0), (0, 0.2, 0, 0, 0, 0.707)]
 
-    max_dist = 1.5
+    meshes = {"mug" : "mug.obj"}
+    renderer = DepthRenderer(meshes, width=100, height=100, show=False)
 
-    cameras = list()
-    for i in range(10000):
-        cameras.append(np.random.uniform(low=(-np.pi, -np.pi, 0.1), high=(np.pi, np.pi, max_dist)))
+    max_dist = 1.0
 
-    # Example camera parameters (from a Realsense D435 camera @ VGA resolution)
-    K = np.array([[613.223, 0.      , 313.568],
-                  [0.     , 613.994 , 246.002],
-                  [0.     , 0.      , 1.0    ]])
+    # cameras = list()
+    # for i in range(5):
+    #     cameras.append(np.random.uniform(low=(-np.pi, -np.pi, 0.1), high=(np.pi, np.pi, max_dist)))
+
+    cam_abr = [(0.7, 0.7, 2), (0.7, 0.7, 1), (0.7, 0.7, 0.5), (0.7, 0.7, 0.2)]
+    cam_xyzrpy = [(0.5, 0.5, 0.5, 0, np.pi/4, 0), (0.5, 0.5, 0.5, np.pi, 0, 0), (0.42331, 0.15634, -5.2341, np.pi/2, np.pi/3, -np.pi/1.2)]
+    # object_poses = {"mug" : (0., 0., -0.5, np.pi/2, 0., 0.)}
+
+    object_poses = []
+    for i in range(100):
+        object_rot =  np.random.uniform(low=(-np.pi, -np.pi, -np.pi), high=(np.pi, np.pi, np.pi))
+        object_poses.append({"mug" : (0., 0., -1.5, *object_rot)})
 
     timings = list()
-    n_exeuctions = 10
+    n_exeuctions = 5
+    images = []
     for i in range(n_exeuctions):
         t_ini = time.time()
-        images = depth_render_example(scene, cameras, height=480, width=640, show=False, camera_K=K)
+        for pose in object_poses:
+            images.append(renderer.render(pose, cam_xyzrpy[2]))
         timings.append(time.time() - t_ini)
 
-    print("Generated %d images in %3.3fs | %3.3ffps" % (len(cameras), np.mean(timings), len(cameras)/np.mean(timings)))
+    print("Generated %d images in %3.3fs | %3.3ffps" % (len(object_poses), np.mean(timings), len(images)/np.mean(timings)))
 
     # Convert images with colormap and save
-    for i, img in enumerate(images):
-        image_cm = np.uint8(cm.viridis(img / max_dist) * 255)
-        pil_image = Image.frombytes("RGBA", img.shape, image_cm)
-        pil_image.save("../depth_images/depth_%d.png" % i, "PNG")
-    #     print("Save image: depth_images/depth_%d.png" % i)
+    os.makedirs("images", exist_ok = True)
+    for i, img in enumerate(images[:100]):
+        image_cm = np.uint8(img / max_dist)
+        pil_image = Image.frombytes("L", img.shape, image_cm)
+        pil_image.save("images/depth_%d.png" % i, "PNG")
