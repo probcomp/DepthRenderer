@@ -1,13 +1,12 @@
 #!/usr/bin/python3
 import os
 import time
-from matplotlib import cm
 from PIL import Image
 import numpy as np
 
-import PyViewer.transformations as tf
-from PyViewer.viewer import CScene, CNode, CTransform, COffscreenWindowManager, CGLFWWindowManager
-from PyViewer.geometry_makers import make_mesh
+import drender.transformations as tf
+from drender.viewer import CScene, CNode, CTransform, COffscreenWindowManager, CGLFWWindowManager
+from drender.geometry_makers import make_mesh
 
 os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
 os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"

@@ -6,18 +6,16 @@ using Statistics: mean
 os = pyimport("os")
 #import time
 time = pyimport("time")
-#from matplotlib import cm
-cm = pyimport("matplotlib.cm")
 #from PIL import Image
 Image = pyimport("PIL.Image")
 #import numpy as np
 
-#import PyViewer.transformations as tf
-tf = pyimport("PyViewer.transformations")
-#from PyViewer.viewer import CScene, CNode, CTransform, COffscreenWindowManager, CGLFWWindowManager
-#from PyViewer.geometry_makers import make_mesh
-#from PyViewer.depth_renderer import DepthRenderer
-depth_renderer = pyimport("PyViewer.depth_renderer")
+#import drender.transformations as tf
+tf = pyimport("drender.transformations")
+#from drender.viewer import CScene, CNode, CTransform, COffscreenWindowManager, CGLFWWindowManager
+#from drender.geometry_makers import make_mesh
+#from drender.depth_renderer import DepthRenderer
+depth_renderer = pyimport("drender.depth_renderer")
 DepthRenderer = depth_renderer.DepthRenderer
 
 os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"

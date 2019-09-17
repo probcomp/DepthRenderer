@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import PyViewer.transformations as tf
+import drender.transformations as tf
 import moderngl as mgl
 import PIL
 from PIL import Image
@@ -600,7 +600,7 @@ class CGLFWWindowManager(CWindowManager):
 
 
 class CScene(object):
-    def __init__(self, name="PyViewer", width=800, height=600, location=(0, 0), window_manager=CGLFWWindowManager(), near=0.001, far = 100.0):
+    def __init__(self, name="drender", width=800, height=600, location=(0, 0), window_manager=CGLFWWindowManager(), near=0.001, far = 100.0):
         print("ModernGL: ", mgl.__version__)
         self.ctx = mgl.create_standalone_context()
 
