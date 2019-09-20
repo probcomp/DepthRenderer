@@ -8,10 +8,10 @@ function to_pybytes(arr::Array)
     pybytes(collect(reinterpret(UInt8, arr[:])))
 end
 
-mgl = pyimport("mgl")
+mgl = pyimport("moderngl")
 Image = pyimport("PIL.Image")
 
-# use a 4x4 matrix to represent a transform
+# we use a 4x4 matrix to represent a transform
 # (don't introduce a special data type)
 
 geometry_vertex_shader = """
@@ -20,16 +20,14 @@ geometry_vertex_shader = """
 uniform mat4 mvp;
 
 in vec3 in_vert;
-out vec3 out_vert;
 
 void main() {
-	v_vert = in_vert;
-	gl_Position = mvp * vec4(v_vert, 1.0);
+	gl_Position = mvp * vec4(in_vert, 1.0);
 } 
 """
 
 sillhouette_fragment_shader = """
-# version 330 core // was version 150
+# version 330 core
 
 out vec4 outColor;
 
@@ -39,22 +37,28 @@ void main()
 }
 """
 
-struct Node
+struct Mesh
+    vertices::Matrix{Float64} # TODO delete
+    vao::PyObject
+    program::PyObject
+end
+
+mutable struct Node
     parent::Union{Nothing,Node}
     children::Vector{Node}
     t::Matrix{Float64}
-    geom::Union{Nothing,Mesh}
+    mesh::Union{Nothing,Mesh}
 end
 
-function draw(node::Node, perspective, view, model, program::PyObject)
+function draw(node::Node, perspective, view, model)
     model = model * node.t
     mvp = perspective * view * model
-    if !isnothing(node.geom)
-        geom = something(node.geom)
-        draw(mvp, geom, program)
+    if !isnothing(node.mesh)
+        mesh = something(node.mesh)
+        draw(mesh, mvp)
     end
     for child in node.children
-        draw(child, perspective, view, model, program)
+        draw(child, perspective, view, model)
     end
 end
 
@@ -84,39 +88,40 @@ struct Scene
     near::Float64
     far::Float64
     fbo::PyObject
+    view_matrix::Matrix{Float64}
 end
 
 # TODO Camera intrinstics are they right?
-function Scene(camera=Camera(800, 600, 600, 600, 400, 300), near=0.001, far=100.)
+function Scene(camera=Camera(600, 600, 600, 600, 300, 300, 0), near=0.001, far=100.)
     ctx = mgl.create_standalone_context()
     #self.depthbuff = self.ctx.depth_renderbuffer((self.width, self.height))
     #fbo = self.ctx.framebuffer(color_attachments=[self.renderbuff], depth_attachment=self.depthbuff)
+    viewport = Viewport(0, 0, camera.width, camera.height)
+    fbo = ctx.simple_framebuffer((camera.width, camera.height))
+    fbo.use()
     program = ctx.program(
         vertex_shader=geometry_vertex_shader,
         fragment_shader=sillhouette_fragment_shader)
     root = Node(nothing, [], eye(4), nothing)
-    viewport = Viewport(0, 0, camera.width, camera.height)
-    fbo = ctx.simple_framebuffer((camera.width, camera.height))
-    fbo.use()
-    Scene(ctx, program, root, viewport, camera, near, far, fbo)
-end
-
-struct Mesh
-    vao::PyObject
-    program::PyObject
+    view_matrix = eye(4) # TODO make settable
+    Scene(ctx, program, root, viewport, camera, near, far, fbo, view_matrix)
 end
 
 # NOTE: vertices should be 3xN matrix where N is the number of vertices
 function Mesh(scene::Scene, vertices::Matrix{Float64})
     # TODO avoid converting and copying the vertex data every time..
-    vbo = ctx.buffer(to_pybytes(Vector{Float32}(vertices[:])))
+    (nrows, ncols) = size(vertices)
+    if nrows != 3
+        error("Vertices should be 3xN matrix")
+    end
+    vbo = scene.ctx.buffer(to_pybytes(Vector{Float32}(vertices[:])))
     vao = scene.ctx.simple_vertex_array(scene.program, vbo, "in_vert")
-    Mesh(vao, program)
+    Mesh(vertices, vao, scene.program)
 end
 
-function draw(geom::Mesh, mvp::Matrix{Float64})
-    geom.program["mvp"].value = (Matrix{Float32}(mvp)[:],...)
-    geom.vao.render()
+function draw(mesh::Mesh, mvp::Matrix{Float64})
+    mesh.program.get("mvp", nothing).value = (Matrix{Float32}(mvp)[:]...,) # right order?
+    mesh.vao.render()
 end
 
 function compute_projection_matrix(fx, fy, cx, cy, near, far, skew=0)
@@ -151,17 +156,27 @@ function render(scene::Scene)
     camera = scene.camera
     viewport = scene.ctx.viewport
 
+    # NOTE perspective can be computed only when one of the parameters are updated
     proj_matrix = compute_projection_matrix(
             camera.fx, camera.fy, camera.cx, camera.cy,
-            self.near, self.far, camera.s)
+            scene.near, scene.far, camera.skew)
     ndc_matrix = compute_ortho_matrix(
             viewport[1], viewport[3],
             viewport[2], viewport[4],
             scene.near, scene.far)
     perspective = ndc_matrix * proj_matrix
 
-    view = eye(4)
-    draw(scene.root, perspective, view, eye(4))
+    draw(scene.root, perspective, scene.view_matrix, eye(4))
 end
 
-obj1 = Mesh(vao) # TODO needs scene.
+scene = Scene()
+a = [0.5, -0.5, -2.0]
+b = [0.0, 0.5, -2.0]
+c = [-0.5, -0.5, -2.0]
+
+vertices = hcat(a, b, c)
+scene.root.mesh = Mesh(scene, vertices)
+render(scene)
+
+fbo = scene.fbo
+Image.frombytes("RGB", fbo.size, pycall(fbo.read, PyObject), "raw", "RGB", 0, -1).show()
