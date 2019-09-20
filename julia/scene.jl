@@ -2,7 +2,7 @@ using LinearAlgebra: I
 
 eye(n) = Matrix{Float64}(I, n, n)
 
-using PyCall: pyimport, pybytes, pycall, PyObject
+using PyCall: pyimport, pybytes, pycall, PyObject, PyBuffer, PyArray_Info
 
 function to_pybytes(arr::Array)
     pybytes(collect(reinterpret(UInt8, arr[:])))
@@ -10,6 +10,7 @@ end
 
 mgl = pyimport("moderngl")
 Image = pyimport("PIL.Image")
+np = pyimport("numpy")
 
 # we use a 4x4 matrix to represent a transform
 # (don't introduce a special data type)
@@ -91,14 +92,15 @@ struct Scene
     view_matrix::Matrix{Float64}
 end
 
-# TODO Camera intrinstics are they right?
 function Scene(camera=Camera(600, 600, 600, 600, 300, 300, 0), near=0.001, far=100.)
     ctx = mgl.create_standalone_context()
-    #self.depthbuff = self.ctx.depth_renderbuffer((self.width, self.height))
-    #fbo = self.ctx.framebuffer(color_attachments=[self.renderbuff], depth_attachment=self.depthbuff)
-    viewport = Viewport(0, 0, camera.width, camera.height)
-    fbo = ctx.simple_framebuffer((camera.width, camera.height))
+    
+    renderbuff = ctx.renderbuffer((camera.width, camera.height))
+    depthbuff = ctx.depth_renderbuffer((camera.width, camera.height))
+    fbo = ctx.framebuffer(color_attachments=[renderbuff], depth_attachment=depthbuff)
+    #fbo = ctx.simple_framebuffer((camera.width, camera.height))
     fbo.use()
+    viewport = Viewport(0, 0, camera.width, camera.height)
     program = ctx.program(
         vertex_shader=geometry_vertex_shader,
         fragment_shader=sillhouette_fragment_shader)
@@ -149,6 +151,21 @@ function compute_ortho_matrix(left, right, bottom, top, near, far)
     return ortho
 end
 
+function get_depth_image(scene::Scene)
+    zFar = scene.far
+    zNear = scene.near
+
+    # read only PyBuffer
+    depth_buffer_pybytes = PyBuffer(pycall(scene.fbo.read, PyObject,
+        viewport=scene.ctx.viewport, components=1, dtype="f4", attachment=-1))
+    depth_buffer_ptr = Ptr{Float32}(pointer(depth_buffer_pybytes))
+    dims = (scene.camera.height, scene.camera.width)
+    depth_buffer = unsafe_wrap(Array, depth_buffer_ptr, dims)
+    z_ndc = Matrix{Float64}(depth_buffer) * 2.0 .- 1.0  # Convert back to Normalized Device Coordinates [0,1] -> [-1,1]
+    depth_image = (2.0 * zNear * zFar) ./ ((-z_ndc * (zFar - zNear) .+ zFar .+ zNear))
+    return depth_image
+end
+
 # write to frame buffer
 function render(scene::Scene)
     scene.fbo.clear()
@@ -166,7 +183,11 @@ function render(scene::Scene)
             scene.near, scene.far)
     perspective = ndc_matrix * proj_matrix
 
+    #viz.clear() # TODO
     draw(scene.root, perspective, scene.view_matrix, eye(4))
+    #viz.swap_buffers() # TODO involves a window manager
+    depth_image = get_depth_image(scene) # [::-1,:] # TODO
+    depth_image
 end
 
 scene = Scene()
@@ -176,7 +197,8 @@ c = [-0.5, -0.5, -2.0]
 
 vertices = hcat(a, b, c)
 scene.root.mesh = Mesh(scene, vertices)
-render(scene)
+depth_image = render(scene)
+Image.fromarray(Matrix{Float32}(depth_image), mode="F").show()
 
-fbo = scene.fbo
-Image.frombytes("RGB", fbo.size, pycall(fbo.read, PyObject), "raw", "RGB", 0, -1).show()
+#fbo = scene.fbo
+##Image.frombytes("RGB", fbo.size, pycall(fbo.read, PyObject), "raw", "RGB", 0, -1).show()
