@@ -14,10 +14,6 @@ os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"
 
 
 if __name__ == "__main__":
-    scene = dict()
-    # scene["meshes"] = ["models/YCB_Dataset/035_power_drill/tsdf/textured.obj"]
-    # scene["meshes"] = ["../models/duck/duck_vhacd.obj", "../models/duck/duck_vhacd.obj"]
-    # scene["poses"] = [(0, 0, 0, 0, 0, 0), (0, 0.2, 0, 0, 0, 0.707)]
 
     meshes = {"mug" : "mug.obj"}
     renderer = DepthRenderer(meshes, width=100, height=100, show=False)
