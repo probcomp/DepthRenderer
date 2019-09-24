@@ -1,6 +1,7 @@
 using ModernGL
 import GLFW
 
+
 width = 600
 height = 600
 
@@ -27,6 +28,58 @@ window = GLFW.CreateWindow(width, height, "test")
 GLFW.MakeContextCurrent(window)
 
 ############
+# geometry #
+############
+
+using LinearAlgebra: I
+eye(n) = Matrix{Float64}(I, n, n)
+
+function compute_projection_matrix(fx, fy, cx, cy, near, far, skew=0)
+    proj = eye(4)
+    proj[1, 1] = fx
+    proj[2, 2] = fy
+    proj[1, 2] = skew
+    proj[1, 3] = -cx
+    proj[2, 3] = -cy
+    proj[3, 3] = near + far
+    proj[3, 4] = near * far
+    proj[4, 4] = 0.0
+    proj[4, 3] = -1
+    return proj
+end
+
+function compute_ortho_matrix(left, right, bottom, top, near, far)
+    ortho = eye(4)
+    ortho[1, 1] = 2 / (right-left)
+    ortho[2, 2] = 2 / (top-bottom)
+    ortho[3, 3] = - 2 / (far - near)
+    ortho[1, 4] = - (right + left) / (right - left)
+    ortho[2, 4] = - (top + bottom) / (top - bottom)
+    ortho[3, 4] = - (far + near) / (far - near)
+    return ortho
+end
+
+struct Camera
+    width::Int
+    height::Int
+    fx::Float64
+    fy::Float64
+    cx::Float64
+    cy::Float64
+    skew::Float64
+end
+
+camera = Camera(width, height, width, height, div(width, 2), div(height, 2), 0)
+near=0.001
+far=100.0
+
+proj_matrix = compute_projection_matrix(
+            camera.fx, camera.fy, camera.cx, camera.cy,
+            near, far, camera.skew)
+ndc_matrix = compute_ortho_matrix(0, width, 0, height, near, far)
+perspective_matrix = convert(Matrix{Float32}, ndc_matrix * proj_matrix)
+
+############
 # shaders #
 ###########
 
@@ -40,8 +93,8 @@ in vec3 position;
 layout (location = 0) uniform mat4 mvp;
 void main()
 {
-    //gl_Position = mvp * vec4(position, 1.0);
-    gl_Position = vec4(position, 1.0);
+    //gl_Position = vec4(position, 1.0);
+    gl_Position = mvp * vec4(position, 1.0);
 }
 """
 
@@ -172,38 +225,42 @@ end
 
 function create_object(fname)
     (vertices, indices) = load_mesh(fname)
+    println(size(vertices))
+    @assert size(vertices)[1] == 3
+    xs = vertices[1,:]
+    ys = vertices[2,:]
+    zs = vertices[3,:]
+    vertices[3,:] = - 2.0 # move back in front of camera
+    println("x-span: $((minimum(xs), maximum(xs))), y-span: $((minimum(ys), maximum(ys))), z-span: $((minimum(zs), maximum(zs)))")
     create_object(vertices, indices)
 end
 
 # triangle 1
-a = Float32[-0.5, -0.5, 0.0]
-b = Float32[0.5, -0.5, 0.0]
-c = Float32[0.0, 0.5, 0.0]
+a = Float32[-0.5, -0.5, -2.0]
+b = Float32[0.5, -0.5, -2.0]
+c = Float32[0.0, 0.5, -2.0]
 triangle_vertices = hcat(a, b, c)
 println(triangle_vertices[:])
 (triangle_vao, triangle_n) = create_object(triangle_vertices, UInt32[0, 1, 2])
 
 # triangle 2
-a = Float32[0.2, 0.0, 0.0]
-b = Float32[0.2, 0.5, 0.0]
-c = Float32[0.7, 0.0, 0.0]
+a = Float32[0.2, 0.0, -2.0]
+b = Float32[0.2, 0.5, -2.0]
+c = Float32[0.7, 0.0, -2.0]
 triangle_vertices = hcat(a, b, c)
 println(triangle_vertices[:])
 (triangle_vao_2, triangle_n) = create_object(triangle_vertices, UInt32[0, 1, 2])
 
-#glUniformMatrix4fv(0, 1, GL_FALSE, Ref(mvp_matrix_data, 1))
-
-#(mug_vao, mug_n) = create_object("mug.obj")
+(mug_vao, mug_n) = create_object("mug.obj")
+println("number of mug faces: $mug_n")
 #(suzanne_vao, suzanne_n) = create_object("suzanne.obj")
 
 ###############
 # render loop #
 ###############
 
-#glEnable(GL_DEPTH_TEST)
-
+glEnable(GL_DEPTH_TEST)
 glViewport(0, 0, width, height)
-
 
 iter = 0
 
@@ -214,20 +271,24 @@ while !GLFW.WindowShouldClose(window)
     iter += 1
 
     glClearColor(0.2f0, 0.3f0, 0.3f0, 1.0f0)
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
 	# render mug
-    #glBindVertexArray(mug_vao)
-    #glDrawElements(GL_TRIANGLES, mug_n, GL_UNSIGNED_INT, C_NULL)
-    #glBindVertexArray(0)
+    glUseProgram(shader_program)
+    glUniformMatrix4fv(0, 1, GL_FALSE, Ref(perspective_matrix, 1))
+    glBindVertexArray(mug_vao)
+    glDrawElements(GL_TRIANGLES, mug_n, GL_UNSIGNED_INT, C_NULL)
+    glBindVertexArray(0)
 
     # render suzanne
+    #glUseProgram(shader_program)
     #glBindVertexArray(suzanne_vao)
     #glDrawElements(GL_TRIANGLES, suzanne_n, GL_UNSIGNED_INT, C_NULL)
     #glBindVertexArray(0)
 
     # render triangle 1
     glUseProgram(shader_program)
+    glUniformMatrix4fv(0, 1, GL_FALSE, Ref(perspective_matrix, 1))
     glBindVertexArray(triangle_vao)
     @assert triangle_n == 1
     glDrawElements(GL_TRIANGLES, triangle_n * 3, GL_UNSIGNED_INT, C_NULL)
@@ -235,6 +296,7 @@ while !GLFW.WindowShouldClose(window)
 
     # render triangle 2
     glUseProgram(shader_program)
+    glUniformMatrix4fv(0, 1, GL_FALSE, Ref(perspective_matrix, 1))
     glBindVertexArray(triangle_vao_2)
     @assert triangle_n == 1
     glDrawElements(GL_TRIANGLES, triangle_n * 3, GL_UNSIGNED_INT, C_NULL)
