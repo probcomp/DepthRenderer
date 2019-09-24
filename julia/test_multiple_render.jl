@@ -1,44 +1,30 @@
 using ModernGL
 import GLFW
 
-############
-# matrices #
-############
+width = 600
+height = 600
 
-function compute_projection_matrix(fx, fy, cx, cy, near, far, skew=0)
-    proj = eye(4)
-    proj[1, 1] = fx
-    proj[2, 2] = fy
-    proj[1, 2] = skew
-    proj[1, 3] = -cx
-    proj[2, 3] = -cy
-    proj[3, 3] = near + far
-    proj[3, 4] = near * far
-    proj[4, 4] = 0.0
-    proj[4, 3] = -1
-    return proj
+window_hint = [
+    (GLFW.SAMPLES,      4),
+    (GLFW.DEPTH_BITS,   24),
+    (GLFW.ALPHA_BITS,   8),
+    (GLFW.RED_BITS,     8),
+    (GLFW.GREEN_BITS,   8),
+    (GLFW.BLUE_BITS,    8),
+    (GLFW.STENCIL_BITS, 0),
+    (GLFW.AUX_BUFFERS,  0),
+    (GLFW.CONTEXT_VERSION_MAJOR, 4),
+    (GLFW.CONTEXT_VERSION_MINOR, 0),
+    (GLFW.OPENGL_PROFILE, GLFW.OPENGL_CORE_PROFILE),
+    (GLFW.OPENGL_FORWARD_COMPAT, GL_TRUE),
+]
+
+for (key, value) in window_hint
+    GLFW.WindowHint(key, value)
 end
 
-function compute_ortho_matrix(left, right, bottom, top, near, far)
-    ortho = eye(4)
-    ortho[1, 1] = 2 / (right-left)
-    ortho[2, 2] = 2 / (top-bottom)
-    ortho[3, 3] = - 2 / (far - near)
-    ortho[1, 4] = - (right + left) / (right - left)
-    ortho[2, 4] = - (top + bottom) / (top - bottom)
-    ortho[3, 4] = - (far + near) / (far - near)
-    return ortho
-end
-
-#proj_matrix = compute_projection_matrix(
-        #camera.fx, camera.fy, camera.cx, camera.cy,
-        #scene.near, scene.far, camera.skew)
-#ndc_matrix = compute_ortho_matrix(
-        #viewport[1], viewport[3],
-        #viewport[2], viewport[4],
-        #scene.near, scene.far)
-#perspective = ndc_matrix * proj_matrix
-
+window = GLFW.CreateWindow(width, height, "test")
+GLFW.MakeContextCurrent(window)
 
 ############
 # shaders #
@@ -46,7 +32,7 @@ end
 
 # vertex shader
 const vertex_source = """
-#version 330
+#version 330 core
 #extension GL_ARB_explicit_attrib_location : require
 #extension GL_ARB_explicit_uniform_location : require
 
@@ -61,7 +47,7 @@ void main()
 
 # fragment shader (for sillhouette)
 const fragment_source = """
-# version 330
+# version 330 core
 
 out vec4 outColor;
 void main()
@@ -144,6 +130,7 @@ glBindFragDataLocation(shader_program, 0, "outColor")
 glLinkProgram(shader_program)
 
 pos_attr = glGetAttribLocation(shader_program, "position")
+println(pos_attr)
 
 ##########
 # meshes #
@@ -188,13 +175,21 @@ function create_object(fname)
     create_object(vertices, indices)
 end
 
-# triangle
+# triangle 1
 a = Float32[-0.5, -0.5, 0.0]
 b = Float32[0.5, -0.5, 0.0]
 c = Float32[0.0, 0.5, 0.0]
 triangle_vertices = hcat(a, b, c)
-println(triangle_vertices)
-(triangle_vao, triangle_n) = create_object(triangle_vertices, UInt32[1, 2, 3])
+println(triangle_vertices[:])
+(triangle_vao, triangle_n) = create_object(triangle_vertices, UInt32[0, 1, 2])
+
+# triangle 2
+a = Float32[0.2, 0.0, 0.0]
+b = Float32[0.2, 0.5, 0.0]
+c = Float32[0.7, 0.0, 0.0]
+triangle_vertices = hcat(a, b, c)
+println(triangle_vertices[:])
+(triangle_vao_2, triangle_n) = create_object(triangle_vertices, UInt32[0, 1, 2])
 
 #glUniformMatrix4fv(0, 1, GL_FALSE, Ref(mvp_matrix_data, 1))
 
@@ -205,36 +200,10 @@ println(triangle_vertices)
 # render loop #
 ###############
 
-glUseProgram(shader_program)
-glEnable(GL_DEPTH_TEST)
+#glEnable(GL_DEPTH_TEST)
 
-width = 600
-height = 600
-
-window_hint = [
-    (GLFW.SAMPLES,      4),
-    (GLFW.DEPTH_BITS,   24),
-    (GLFW.ALPHA_BITS,   8),
-    (GLFW.RED_BITS,     8),
-    (GLFW.GREEN_BITS,   8),
-    (GLFW.BLUE_BITS,    8),
-    (GLFW.STENCIL_BITS, 0),
-    (GLFW.AUX_BUFFERS,  0),
-    (GLFW.CONTEXT_VERSION_MAJOR, 3),# minimum OpenGL v. 3
-    (GLFW.CONTEXT_VERSION_MINOR, 0),# minimum OpenGL v. 3.0
-    (GLFW.OPENGL_PROFILE, GLFW.OPENGL_ANY_PROFILE),
-    (GLFW.OPENGL_FORWARD_COMPAT, GL_TRUE),
-]
-
-for (key, value) in window_hint
-    GLFW.WindowHint(key, value)
-end
-
-window = GLFW.CreateWindow(width, height, "test")
-GLFW.MakeContextCurrent(window)
 glViewport(0, 0, width, height)
 
-glUseProgram(shader_program)
 
 iter = 0
 
@@ -243,6 +212,9 @@ while !GLFW.WindowShouldClose(window)
     global iter
     println("iter $iter")
     iter += 1
+
+    glClearColor(0.2f0, 0.3f0, 0.3f0, 1.0f0)
+    glClear(GL_COLOR_BUFFER_BIT);
 
 	# render mug
     #glBindVertexArray(mug_vao)
@@ -254,9 +226,18 @@ while !GLFW.WindowShouldClose(window)
     #glDrawElements(GL_TRIANGLES, suzanne_n, GL_UNSIGNED_INT, C_NULL)
     #glBindVertexArray(0)
 
-    # render triangle
+    # render triangle 1
+    glUseProgram(shader_program)
     glBindVertexArray(triangle_vao)
-    glDrawElements(GL_TRIANGLES, triangle_n, GL_UNSIGNED_INT, C_NULL)
+    @assert triangle_n == 1
+    glDrawElements(GL_TRIANGLES, triangle_n * 3, GL_UNSIGNED_INT, C_NULL)
+    glBindVertexArray(0)
+
+    # render triangle 2
+    glUseProgram(shader_program)
+    glBindVertexArray(triangle_vao_2)
+    @assert triangle_n == 1
+    glDrawElements(GL_TRIANGLES, triangle_n * 3, GL_UNSIGNED_INT, C_NULL)
     glBindVertexArray(0)
 
 	# Swap front and back buffers
