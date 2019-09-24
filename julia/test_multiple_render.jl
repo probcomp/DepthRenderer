@@ -1,9 +1,10 @@
 using ModernGL
 import GLFW
+using Printf: @sprintf
+using FileIO
 
-
-width = 600
-height = 600
+width = 100
+height = 100
 
 window_hint = [
     (GLFW.SAMPLES,      4),
@@ -78,6 +79,11 @@ proj_matrix = compute_projection_matrix(
             near, far, camera.skew)
 ndc_matrix = compute_ortho_matrix(0, width, 0, height, near, far)
 perspective_matrix = convert(Matrix{Float32}, ndc_matrix * proj_matrix)
+
+function scale_depth(x)
+    far .* near ./ (far .- (far .- near) .* x)
+end
+
 
 ############
 # shaders #
@@ -230,7 +236,7 @@ function create_object(fname)
     xs = vertices[1,:]
     ys = vertices[2,:]
     zs = vertices[3,:]
-    vertices[3,:] = - 2.0 # move back in front of camera
+    vertices[3,:] = vertices[3,:] .- 2.0 # move back in front of camera
     println("x-span: $((minimum(xs), maximum(xs))), y-span: $((minimum(ys), maximum(ys))), z-span: $((minimum(zs), maximum(zs)))")
     create_object(vertices, indices)
 end
@@ -255,6 +261,45 @@ println(triangle_vertices[:])
 println("number of mug faces: $mug_n")
 #(suzanne_vao, suzanne_n) = create_object("suzanne.obj")
 
+#####################
+# setup framebuffer #
+#####################
+
+#fbo = Ref(GLuint(0))
+#glGenFramebuffers(1, fbo)
+#glBindFramebuffer(GL_FRAMEBUFFER, fbo[])
+#
+#color_rbo = Ref(GLuint(0))
+#glGenRenderbuffers(1, color_rbo)
+#glBindRenderbuffer(GL_RENDERBUFFER, color_rbo[])
+#glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, 1, 1)
+#
+#depth_rbo = Ref(GLuint(0))
+#glGenRenderbuffers(1, depth_rbo)
+#glBindRenderbuffer(GL_RENDERBUFFER, depth_rbo[])
+#glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 1, 1)
+#
+#glFramebufferRenderbuffer(
+    #GL_FRAMEBUFFER,
+    #GL_COLOR_ATTACHMENT0,
+    #GL_RENDERBUFFER,
+    #color_rbo[]
+#)
+
+#glFramebufferRenderbuffer(
+    #GL_FRAMEBUFFER,
+    #GL_DEPTH_ATTACHMENT,
+    #GL_RENDERBUFFER,
+    #depth_rbo[]
+#)
+#
+#if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    #println("error, framebuffer not complete..")
+    #exit()
+#end
+
+#glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
 ###############
 # render loop #
 ###############
@@ -262,10 +307,12 @@ println("number of mug faces: $mug_n")
 glEnable(GL_DEPTH_TEST)
 glViewport(0, 0, width, height)
 
+
 iter = 0
 
 # Loop until the user closes the window
-while !GLFW.WindowShouldClose(window)
+#while !GLFW.WindowShouldClose(window)
+for i=1:1000
     global iter
     println("iter $iter")
     iter += 1
@@ -302,11 +349,24 @@ while !GLFW.WindowShouldClose(window)
     glDrawElements(GL_TRIANGLES, triangle_n * 3, GL_UNSIGNED_INT, C_NULL)
     glBindVertexArray(0)
 
+    # get depth data out
+    data = Vector{Float32}(undef, width * height)
+    #glReadPixels(0, 0, width, height, GL_LUMINANCE, GL_UNSIGNED_BYTE, Ref(data, 1))
+    glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, Ref(data, 1))
+    #println(maximum(data))
+    #println(minimum(data))
+    scaled = scale_depth(data)
+    depth_image = reshape(scaled, (width, height))'[end:-1:1,:]
+    #println(any(isnan.(depth_image[:])))
+    #println(maximum(depth_image))
+    #save(@sprintf("imgs/depth-%03d.png", iter), depth_image ./ maximum(depth_image))
+
 	# Swap front and back buffers
-	GLFW.SwapBuffers(window)
+	#GLFW.SwapBuffers(window)
+    glFlush() 
 
 	# Poll for and process events
-	GLFW.PollEvents()
+	#GLFW.PollEvents()
 end
 
 GLFW.DestroyWindow(window)
