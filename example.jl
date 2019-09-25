@@ -3,8 +3,6 @@ using Printf: @sprintf
 using Profile
 using ProfileView
 
-include("renderer.jl")
-
 using DepthRenderer
 
 width = 100

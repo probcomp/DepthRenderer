@@ -38,7 +38,7 @@ end
 function perspective_matrix(width, height, fx, fy, cx, cy, near, far)
     proj_matrix = compute_projection_matrix(
             fx, fy, cx, cy,
-            r.near, r.far, 0.f0)
+            near, far, 0.f0)
     ndc_matrix = compute_ortho_matrix(0, width, 0, height, near, far)
     ndc_matrix * proj_matrix
 end
@@ -244,5 +244,6 @@ function draw!(r::Renderer, node::Node, mvp::Matrix{Float32})
 end
 
 export Renderer, perspective_matrix, add_mesh!, load_mesh_data, Node, draw!, get_depth_image!
+export eye
 
 end # module Renderer
