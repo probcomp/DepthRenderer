@@ -10,12 +10,19 @@ height = 100.0
 cam = Camera(width, height, fx=width, fy=height, cx=div(width, 2), cy=div(height, 2), near=0.001, far=5.0)
 r = Renderer(cam)
 
-# triangle
+# triangle 1
 a = Float32[-1, -1, -2.0]
 b = Float32[1, -1, -2.0]
 c = Float32[0, 1, -2.0]
 triangle_vertices = hcat(a, b, c)
-triangle = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
+triangle1 = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
+
+# triangle 2
+a = Float32[1.5, 2, -4]
+b = Float32[2, 2, -4]
+c = Float32[2, 1.5, -4]
+triangle_vertices = hcat(a, b, c)
+triangle2 = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
 
 # mug
 (vertices, indices) = load_mesh_data("mug.obj")
@@ -27,7 +34,8 @@ root = Node(
     mesh=nothing,
     transform=eye(4),
     children=[
-        Node(mesh=triangle, transform=eye(4)),
+        Node(mesh=triangle1, transform=eye(4)),
+        Node(mesh=triangle2, transform=eye(4)),
         Node(mesh=mug, transform=eye(4))])
 
 model = eye(4)
@@ -35,10 +43,11 @@ view = eye(4)
 
 function do_render_test(n::Int)
     for i=1:n
-        #println("i: $i")
+        println("i: $i")
         draw!(r, root, model, view)
-        depth_image = get_depth_image!(r; show_in_window=false)
-        #save(@sprintf("imgs/depth-%03d.png", i), depth_image ./ maximum(depth_image))
+        depth_image = get_depth_image!(r; show_in_window=true)
+        depth_image = depth_image'[end:-1:1,:]
+        save(@sprintf("imgs/depth-%04d.png", i), depth_image ./ maximum(depth_image))
     end
 end
 

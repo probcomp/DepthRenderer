@@ -166,10 +166,13 @@ function destroy!(r::Renderer)
 end
 
 function get_depth_image!(renderer::Renderer; show_in_window=false)
-    data = Vector{Float32}(undef, renderer.cam.width * renderer.cam.height)
+    # depth buffer values in row major order
+    data = Matrix{Float32}(undef, renderer.cam.width, renderer.cam.height)
     glReadPixels(0, 0, renderer.cam.width, renderer.cam.height, GL_DEPTH_COMPONENT, GL_FLOAT, Ref(data, 1))
-    scaled = scale_depth(data, renderer.cam.near, renderer.cam.far)
-    depth_image = reshape(scaled, (renderer.cam.width, renderer.cam.height))'[end:-1:1,:]
+
+    # compute actual depth in distance units from depth buffer values
+    depth_image = scale_depth(data, renderer.cam.near, renderer.cam.far)
+
     if show_in_window
         glClearColor(0.0f0, 0.0f0, 0.0f0, 1.0f0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -178,7 +181,6 @@ function get_depth_image!(renderer::Renderer; show_in_window=false)
         glUseProgram(renderer.show_depth_shader)
         glUniform1i(glGetUniformLocation(renderer.show_depth_shader, "depth_texture"), 0)
         depth_normalized = depth_image ./ maximum(depth_image)
-        depth_normalized = Matrix{Float32}(depth_normalized')
         glTexImage2D(
             GL_TEXTURE_2D, 0, GL_R32F, renderer.cam.width, renderer.cam.height,
             0, GL_RED, GL_FLOAT, Ref(depth_normalized, 1))
@@ -274,7 +276,7 @@ function draw!(r::Renderer, node::Node, model::Matrix{Float32}, view::Matrix{Flo
     end
 end
 
-export Camera, Renderer, perspective_matrix, add_mesh!, load_mesh_data, Node, draw!, get_depth_image!
+export Camera, Renderer, add_mesh!, load_mesh_data, Node, draw!, get_depth_image!
 export eye
 
 end # module Renderer
