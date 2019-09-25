@@ -1,11 +1,15 @@
+name = "DepthRenderer"
+uuid = "4aab118c-7851-11e9-3219-d7a4f63bd272"
+authors = ["Marco Cusumano-Towner <imarcoam@gmail.com>"]
+version = "0.1.0"
+
 [deps]
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 GLFW = "f7f18e0c-5ee9-5ccd-a5bf-e8befd85ed98"
 GeometryTypes = "4d00f742-c7ba-57c2-abde-4428a4b178cb"
-ImageMagick = "6218d12a-5da1-5696-b52f-db25d2ecc6d1"
-JLD = "4138dd39-2aa7-5051-a626-17a0bb65d9c8"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MeshIO = "7269a6da-0436-5bbc-96c2-40638cbb6118"
 ModernGL = "66fc600b-dfda-50eb-8b99-91cfa97b1301"
 Profile = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 ProfileView = "c46f51b8-102a-5cf2-8d2c-8597cb0e0da7"
-PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
