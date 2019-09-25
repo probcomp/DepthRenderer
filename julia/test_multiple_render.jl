@@ -12,6 +12,31 @@ function scale_depth(x, near, far)
     far .* near ./ (far .- (far .- near) .* x)
 end
 
+function compute_projection_matrix(fx, fy, cx, cy, near, far, skew=0f0)
+    proj = eye(4)
+    proj[1, 1] = fx
+    proj[2, 2] = fy
+    proj[1, 2] = skew
+    proj[1, 3] = -cx
+    proj[2, 3] = -cy
+    proj[3, 3] = near + far
+    proj[3, 4] = near * far
+    proj[4, 4] = 0.0f0
+    proj[4, 3] = -1f0
+    return proj
+end
+
+function compute_ortho_matrix(left, right, bottom, top, near, far)
+    ortho = eye(4)
+    ortho[1, 1] = 2f0 / (right-left)
+    ortho[2, 2] = 2f0 / (top-bottom)
+    ortho[3, 3] = - 2f0 / (far - near)
+    ortho[1, 4] = - (right + left) / (right - left)
+    ortho[2, 4] = - (top + bottom) / (top - bottom)
+    ortho[3, 4] = - (far + near) / (far - near)
+    return ortho
+end
+
 include("shaders.jl")
 include("file_utils.jl")
 
@@ -19,7 +44,7 @@ include("file_utils.jl")
 # Renderer #
 ############
 
-struct Renderer
+mutable struct Renderer
     window::GLFW.Window
     width::Int
     height::Int
@@ -30,6 +55,7 @@ struct Renderer
     depth_texture::GLuint
     show_depth_vao::GLuint
     pos_attr::Int
+    depth_image::Matrix{Float32}
 end
 
 function Renderer(width, height, near, far)
@@ -57,6 +83,7 @@ function Renderer(width, height, near, far)
     show_depth_shader, depth_pos_attr, depth_tex_attr = make_show_depth_shader()
     glEnable(GL_DEPTH_TEST)
     glViewport(0, 0, width, height)
+    glClear(GL_DEPTH_BUFFER_BIT)
 
     # texture with which we'll show depth
     depth_texture = Ref(GLuint(0))
@@ -90,26 +117,39 @@ function Renderer(width, height, near, far)
 
     Renderer(
         window, width, height, near, far, compute_depth_shader, show_depth_shader,
-        depth_texture[], show_depth_vao[], pos_attr)
+        depth_texture[], show_depth_vao[], pos_attr,
+        Matrix{Float32}(undef, width, height))
 end
 
-function clear!(renderer::Renderer; show_in_window=false)
+# TODO camera
+
+function get_depth_image!(renderer::Renderer; show_in_window=false)
+    data = Vector{Float32}(undef, renderer.width * renderer.height)
+    glReadPixels(0, 0, renderer.width, renderer.height, GL_DEPTH_COMPONENT, GL_FLOAT, Ref(data, 1))
+    scaled = scale_depth(data, renderer.near, renderer.far)
+    depth_image = reshape(scaled, (renderer.width, renderer.height))'[end:-1:1,:]
     if show_in_window
+        glClearColor(0.0f0, 0.0f0, 0.0f0, 1.0f0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, renderer.depth_texture)
+        glUseProgram(renderer.show_depth_shader)
+        glUniform1i(glGetUniformLocation(renderer.show_depth_shader, "depth_texture"), 0)
+        depth_normalized = depth_image ./ maximum(depth_image)
+        depth_normalized = Matrix{Float32}(depth_normalized')
+        glTexImage2D(
+            GL_TEXTURE_2D, 0, GL_R32F, renderer.width, renderer.height,
+            0, GL_RED, GL_FLOAT, Ref(depth_normalized, 1))
+        glBindVertexArray(renderer.show_depth_vao)
+        glDrawArrays(GL_TRIANGLES, 0, 6)
+        glBindVertexArray(0)
         GLFW.SwapBuffers(renderer.window)
         GLFW.PollEvents()
     else
         glFlush()
     end
     glClear(GL_DEPTH_BUFFER_BIT)
-end
-
-# TODO camera
-
-function get_depth_image(renderer::Renderer)
-    data = Vector{Float32}(undef, width * height)
-    glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, Ref(data, 1))
-    scaled = scale_depth(data, renderer.near, renderer.far)
-    reshape(scaled, (width, height))'[end:-1:1,:]
+    depth_image
 end
 
 struct Mesh
@@ -120,7 +160,9 @@ end
 
 function add_mesh!(renderer::Renderer, vertices, indices)
     # vertices should be 3xN
-    # TODO create a version that allows mesh to change frequently
+    @assert size(vertices)[1] == 3
+
+    # TODO allows to change vertex data
 
     # create a vertex array object for the mesh and bind it
     vao = Ref(GLuint(0))
@@ -152,12 +194,11 @@ end
 
 function load_mesh_data(fname)
     (vertices, indices) = load_mesh(fname)
-    println(size(vertices))
     @assert size(vertices)[1] == 3
     xs = vertices[1,:]
     ys = vertices[2,:]
     zs = vertices[3,:]
-    vertices[3,:] = vertices[3,:] .- 1.0 # move back in front of camera
+    vertices[3,:] = vertices[3,:] .- 0.5 # move back in front of camera
     (vertices, indices)
 end
 
@@ -166,17 +207,12 @@ function draw!(renderer::Renderer, mesh::Mesh, mvp::Matrix{Float32})
     glUseProgram(mesh.renderer.compute_depth_shader)
     glUniformMatrix4fv(0, 1, GL_FALSE, Ref(mvp, 1))
     glBindVertexArray(mesh.vao)
-    glDrawElements(GL_TRIANGLES, mesh.n_triangles, GL_UNSIGNED_INT, C_NULL)
+    glDrawElements(GL_TRIANGLES, mesh.n_triangles * 3, GL_UNSIGNED_INT, C_NULL)
     glBindVertexArray(0)
 end
 
 
-# TEST IT
-
-width = 100
-height = 100 
-
-r = Renderer(width, height, 0.01, 100.)
+r = Renderer(100, 100, 0.001, 100.)
 
 # triangle 1
 a = Float32[-0.5, -0.5, -2.0]
@@ -200,17 +236,26 @@ mug = add_mesh!(r, vertices, indices)
 (vertices, indices) = load_mesh_data("suzanne.obj")
 suzanne = add_mesh!(r, vertices, indices)
 
+proj_matrix = compute_projection_matrix(
+            r.width, r.height,
+            div(r.width, 2), div(r.height, 2),
+            r.near, r.far, 0.f0)
+ndc_matrix = compute_ortho_matrix(0, r.width, 0, r.height, r.near, r.far)
+perspective = ndc_matrix * proj_matrix
+mvp = perspective
+
 function do_render_test(n::Int)
     for i=1:n
-        clear!(r)
-        draw!(r, mug, eye(4))
-        draw!(r, triangle1, eye(4))
-        draw!(r, triangle2, eye(4))
-        depth_image = get_depth_image(r)
-        save(@sprintf("imgs/depth-%03d.png", i), depth_image ./ maximum(depth_image))
+        draw!(r, mug, mvp)
+        #draw!(r, suzanne, mvp)
+        #draw!(r, triangle1, mvp)
+        #draw!(r, triangle2, mvp)
+        depth_image = get_depth_image!(r; show_in_window=false)
+        #save(@sprintf("imgs/depth-%03d.png", i), depth_image ./ maximum(depth_image))
     end
 end
 
+@time do_render_test(10000)
 @time do_render_test(10000)
 @time do_render_test(10000)
 Profile.clear()
@@ -219,127 +264,4 @@ li, lidict = Profile.retrieve()
 using JLD
 @save "profdata.jld" li lidict
 
-GLFW.DestroyWindow(renderer.window)
-
-exit()
-
-############
-# geometry #
-############
-
-function compute_projection_matrix(fx, fy, cx, cy, near, far, skew=0)
-    proj = eye(4)
-    proj[1, 1] = fx
-    proj[2, 2] = fy
-    proj[1, 2] = skew
-    proj[1, 3] = -cx
-    proj[2, 3] = -cy
-    proj[3, 3] = near + far
-    proj[3, 4] = near * far
-    proj[4, 4] = 0.0
-    proj[4, 3] = -1
-    return proj
-end
-
-function compute_ortho_matrix(left, right, bottom, top, near, far)
-    ortho = eye(4)
-    ortho[1, 1] = 2 / (right-left)
-    ortho[2, 2] = 2 / (top-bottom)
-    ortho[3, 3] = - 2 / (far - near)
-    ortho[1, 4] = - (right + left) / (right - left)
-    ortho[2, 4] = - (top + bottom) / (top - bottom)
-    ortho[3, 4] = - (far + near) / (far - near)
-    return ortho
-end
-
-struct Camera
-    width::Int
-    height::Int
-    fx::Float64
-    fy::Float64
-    cx::Float64
-    cy::Float64
-    skew::Float64
-end
-
-camera = Camera(width, height, width, height, div(width, 2), div(height, 2), 0)
-near=0.001
-far=100.0
-
-proj_matrix = compute_projection_matrix(
-            camera.fx, camera.fy, camera.cx, camera.cy,
-            near, far, camera.skew)
-ndc_matrix = compute_ortho_matrix(0, width, 0, height, near, far)
-perspective_matrix = convert(Matrix{Float32}, ndc_matrix * proj_matrix)
-
-
-
-###############
-# render loop #
-###############
-
-# Loop until the user closes the window
-#while !GLFW.WindowShouldClose(window)
-function render(show_in_window)
-
-    glClear(GL_DEPTH_BUFFER_BIT)
-
-	# render mug
-    glUseProgram(shader_program)
-    glUniformMatrix4fv(0, 1, GL_FALSE, Ref(perspective_matrix, 1))
-    glBindVertexArray(mug_vao)
-    glDrawElements(GL_TRIANGLES, mug_n, GL_UNSIGNED_INT, C_NULL)
-    glBindVertexArray(0)
-
-    # render suzanne
-    #glUseProgram(shader_program)
-    #glBindVertexArray(suzanne_vao)
-    #glDrawElements(GL_TRIANGLES, suzanne_n, GL_UNSIGNED_INT, C_NULL)
-    #glBindVertexArray(0)
-
-    # render triangle 1
-    glUseProgram(shader_program)
-    glUniformMatrix4fv(0, 1, GL_FALSE, Ref(perspective_matrix, 1))
-    glBindVertexArray(triangle_vao)
-    @assert triangle_n == 1
-    glDrawElements(GL_TRIANGLES, triangle_n * 3, GL_UNSIGNED_INT, C_NULL)
-    glBindVertexArray(0)
-
-    # render triangle 2
-    glUseProgram(shader_program)
-    glUniformMatrix4fv(0, 1, GL_FALSE, Ref(perspective_matrix, 1))
-    glBindVertexArray(triangle_vao_2)
-    @assert triangle_n == 1
-    glDrawElements(GL_TRIANGLES, triangle_n * 3, GL_UNSIGNED_INT, C_NULL)
-    glBindVertexArray(0)
-
-    # get depth data out
-    data = Vector{Float32}(undef, width * height)
-    glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, Ref(data, 1))
-    scaled = scale_depth(data)
-    depth_image = reshape(scaled, (width, height))'[end:-1:1,:]
-    #save(@sprintf("imgs/depth-%03d.png", i), depth_image ./ maximum(depth_image))
-
-    # show the depth iamge
-    if show_in_window
-        glClearColor(0.0f0, 0.0f0, 0.0f0, 1.0f0)
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, depth_texture[])
-        glUseProgram(depth_shader_program)
-        glUniform1i(glGetUniformLocation(depth_shader_program, "depth_texture"), 0)
-        depth_normalized = depth_image ./ maximum(depth_image)
-        depth_normalized = Matrix{Float32}(depth_normalized')
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, Ref(depth_normalized, 1))
-        glBindVertexArray(screen_vao[])
-        glDrawArrays(GL_TRIANGLES, 0, 6)
-        glBindVertexArray(0)
-    end
-
-    if show_in_window
-	    GLFW.SwapBuffers(window)
-	    GLFW.PollEvents()
-    else
-        glFlush()
-    end
-end
+GLFW.DestroyWindow(r.window)
