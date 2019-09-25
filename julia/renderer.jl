@@ -1,9 +1,7 @@
+module DepthRenderer
+
 using ModernGL
 import GLFW
-using Printf: @sprintf
-using FileIO
-using Profile
-using ProfileView
 
 using LinearAlgebra: I
 eye(n) = Matrix{Float32}(I, n, n)
@@ -37,6 +35,14 @@ function compute_ortho_matrix(left, right, bottom, top, near, far)
     return ortho
 end
 
+function perspective_matrix(width, height, fx, fy, cx, cy, near, far)
+    proj_matrix = compute_projection_matrix(
+            fx, fy, cx, cy,
+            r.near, r.far, 0.f0)
+    ndc_matrix = compute_ortho_matrix(0, width, 0, height, near, far)
+    ndc_matrix * proj_matrix
+end
+
 include("shaders.jl")
 include("file_utils.jl")
 
@@ -60,7 +66,7 @@ end
 
 function Renderer(width, height, near, far)
     window_hint = [
-        (GLFW.SAMPLES,      4), # TODO reduce?
+        (GLFW.SAMPLES,      0),
         (GLFW.DEPTH_BITS,   24),
         (GLFW.ALPHA_BITS,   8),
         (GLFW.RED_BITS,     8),
@@ -121,7 +127,9 @@ function Renderer(width, height, near, far)
         Matrix{Float32}(undef, width, height))
 end
 
-# TODO camera
+function destroy!(r::Renderer)
+    GLFW.DestroyWindow(r.window)
+end
 
 function get_depth_image!(renderer::Renderer; show_in_window=false)
     data = Vector{Float32}(undef, renderer.width * renderer.height)
@@ -162,7 +170,7 @@ function add_mesh!(renderer::Renderer, vertices, indices)
     # vertices should be 3xN
     @assert size(vertices)[1] == 3
 
-    # TODO allows to change vertex data
+    # TODO allow to change vertex data
 
     # create a vertex array object for the mesh and bind it
     vao = Ref(GLuint(0))
@@ -198,7 +206,7 @@ function load_mesh_data(fname)
     xs = vertices[1,:]
     ys = vertices[2,:]
     zs = vertices[3,:]
-    vertices[3,:] = vertices[3,:] .- 0.5 # move back in front of camera
+    vertices[3,:] = vertices[3,:] .- 3.0 # move back in front of camera
     (vertices, indices)
 end
 
@@ -211,57 +219,30 @@ function draw!(renderer::Renderer, mesh::Mesh, mvp::Matrix{Float32})
     glBindVertexArray(0)
 end
 
+###############
+# scene graph #
+###############
 
-r = Renderer(100, 100, 0.001, 100.)
+mutable struct Node
+    mesh::Union{Nothing,Mesh}
+    transform::Matrix{Float32}
+    children::Vector{Node}
+end
 
-# triangle 1
-a = Float32[-0.5, -0.5, -2.0]
-b = Float32[0.5, -0.5, -2.0]
-c = Float32[0.0, 0.5, -2.0]
-triangle_vertices = hcat(a, b, c)
-triangle1 = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
+function Node(;transform::Matrix{Float32}=eye(4), children::Vector{Node}=Node[], mesh=nothing)
+    Node(mesh, transform, children)
+end
 
-# triangle 2
-a = Float32[0.2, 0.0, -2.0]
-b = Float32[0.2, 0.5, -2.0]
-c = Float32[0.7, 0.0, -2.0]
-triangle_vertices = hcat(a, b, c)
-triangle2 = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
-
-# mug
-(vertices, indices) = load_mesh_data("mug.obj")
-mug = add_mesh!(r, vertices, indices)
-
-# suzanne
-(vertices, indices) = load_mesh_data("suzanne.obj")
-suzanne = add_mesh!(r, vertices, indices)
-
-proj_matrix = compute_projection_matrix(
-            r.width, r.height,
-            div(r.width, 2), div(r.height, 2),
-            r.near, r.far, 0.f0)
-ndc_matrix = compute_ortho_matrix(0, r.width, 0, r.height, r.near, r.far)
-perspective = ndc_matrix * proj_matrix
-mvp = perspective
-
-function do_render_test(n::Int)
-    for i=1:n
-        draw!(r, mug, mvp)
-        #draw!(r, suzanne, mvp)
-        #draw!(r, triangle1, mvp)
-        #draw!(r, triangle2, mvp)
-        depth_image = get_depth_image!(r; show_in_window=false)
-        #save(@sprintf("imgs/depth-%03d.png", i), depth_image ./ maximum(depth_image))
+function draw!(r::Renderer, node::Node, mvp::Matrix{Float32})
+    mvp = mvp * node.transform
+    if !isnothing(node.mesh)
+        draw!(r, node.mesh, mvp)
+    end
+    for child in node.children
+        draw!(r, child, mvp)
     end
 end
 
-@time do_render_test(10000)
-@time do_render_test(10000)
-@time do_render_test(10000)
-Profile.clear()
-@profile do_render_test(10000)
-li, lidict = Profile.retrieve()
-using JLD
-@save "profdata.jld" li lidict
+export Renderer, perspective_matrix, add_mesh!, load_mesh_data, Node, draw!, get_depth_image!
 
-GLFW.DestroyWindow(r.window)
+end # module Renderer
