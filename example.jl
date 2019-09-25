@@ -29,6 +29,7 @@ triangle2 = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
 (vertices, indices) = load_mesh_data("mug.obj")
 mug = add_mesh!(r, vertices, indices)
 
+# scene graph
 root = Node(
     mesh=nothing,
     transform=eye(4),
@@ -45,19 +46,20 @@ mvp = perspective_matrix(
 
 function do_render_test(n::Int)
     for i=1:n
-        println("i: $i")
+        #println("i: $i")
         draw!(r, root, mvp)
         depth_image = get_depth_image!(r; show_in_window=false)
-        save(@sprintf("imgs/depth-%03d.png", i), depth_image ./ maximum(depth_image))
+        #save(@sprintf("imgs/depth-%03d.png", i), depth_image ./ maximum(depth_image))
     end
 end
 
 @time do_render_test(10000)
 @time do_render_test(10000)
-Profile.clear()
-@profile do_render_test(10000)
-li, lidict = Profile.retrieve()
-using JLD
-@save "profdata.jld" li lidict
+
+#Profile.clear()
+#@profile do_render_test(10000)
+#li, lidict = Profile.retrieve()
+#using JLD
+#@save "profdata.jld" li lidict
 
 destroy!(r)
