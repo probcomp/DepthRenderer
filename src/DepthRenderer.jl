@@ -276,7 +276,7 @@ function draw!(r::Renderer, node::Node, model::Matrix{Float32}, view::Matrix{Flo
     end
 end
 
-export Camera, Renderer, add_mesh!, load_mesh_data, Node, draw!, get_depth_image!
+export Camera, Renderer, add_mesh!, load_mesh_data, Node, draw!, get_depth_image!, destroy!
 export eye
 
 end # module Renderer
