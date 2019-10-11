@@ -1,53 +1,60 @@
-using FileIO
+import FileIO
 using Printf: @sprintf
 using Profile
 using ProfileView
+using Geometry: CameraIntrinsics, TriangleMesh, SceneGraphNode, Pose6D, to_matrix, I4
 
 using DepthRenderer
 
-width = 100.0
-height = 100.0
-cam = Camera(width, height, fx=width, fy=height, cx=div(width, 2), cy=div(height, 2), near=0.001, far=5.0)
-r = Renderer(cam)
+width = 100
+height = 100
+
+cam = CameraIntrinsics(
+    width=width, height=height,
+    fx=width, fy=height, cx=div(width, 2), cy=div(height, 2),
+    near=0.001, far=5.0)
+
+renderer = Renderer(cam)
 
 # triangle 1
 a = Float32[-1, -1, -2.0]
 b = Float32[1, -1, -2.0]
 c = Float32[0, 1, -2.0]
-triangle_vertices = hcat(a, b, c)
-triangle1 = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
+vertices = hcat(a, b, c)
+indices = hcat(UInt32[0, 1, 2])
+triangle1 = TriangleMesh(vertices, indices)
+register_mesh!(renderer, triangle1)
 
 # triangle 2
 a = Float32[1.5, 2, -4]
 b = Float32[2, 2, -4]
 c = Float32[2, 1.5, -4]
-triangle_vertices = hcat(a, b, c)
-triangle2 = add_mesh!(r, triangle_vertices, UInt32[0, 1, 2])
+vertices = hcat(a, b, c)
+indices = hcat(UInt32[0, 1, 2])
+triangle2 = TriangleMesh(vertices, indices)
+register_mesh!(renderer, triangle2)
 
 # mug
-(vertices, indices) = load_mesh_data("mug.obj")
-vertices[3,:] .=- 0.5 # move in front of camera
-mug = add_mesh!(r, vertices, indices)
+mug = TriangleMesh("mug.obj")
+register_mesh!(renderer, mug)
 
 # scene graph
-root = Node(
-    mesh=nothing,
-    transform=eye(4),
+root = SceneGraphNode(
     children=[
-        Node(mesh=triangle1, transform=eye(4)),
-        Node(mesh=triangle2, transform=eye(4)),
-        Node(mesh=mug, transform=eye(4))])
+        SceneGraphNode(mesh=triangle1),
+        SceneGraphNode(mesh=triangle2),
+        SceneGraphNode(mesh=mug, transform=to_matrix(Pose6D(0, 0, -0.5, 0, 0, 0)))])
 
-model = eye(4)
-view = eye(4)
+model = I4(Float32)
+view = I4(Float32)
 
 function do_render_test(n::Int)
     for i=1:n
         println("i: $i")
-        draw!(r, root, model, view)
-        depth_image = get_depth_image!(r; show_in_window=true)
+        draw!(renderer, root, model, view)
+        depth_image = get_depth_image!(renderer; show_in_window=true)
         depth_image = depth_image'[end:-1:1,:]
-        save(@sprintf("imgs/depth-%04d.png", i), depth_image ./ maximum(depth_image))
+        FileIO.save(@sprintf("imgs/depth-%04d.png", i), depth_image ./ maximum(depth_image))
     end
 end
 
@@ -60,4 +67,4 @@ end
 #using JLD
 #@save "profdata.jld" li lidict
 
-destroy!(r)
+destroy!(renderer)

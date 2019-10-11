@@ -2,17 +2,14 @@ module DepthRenderer
 
 using ModernGL
 import GLFW
-
-using LinearAlgebra: I
-eye(n) = Matrix{Float32}(I, n, n)
+using Geometry: I4, TriangleMesh, CameraIntrinsics, SceneGraphNode, num_triangles
 
 function scale_depth(x, near, far)
     far .* near ./ (far .- (far .- near) .* x)
 end
 
-
 function compute_projection_matrix(fx, fy, cx, cy, near, far, skew=0f0)
-    proj = eye(4)
+    proj = I4(Float32)
     proj[1, 1] = fx
     proj[2, 2] = fy
     proj[1, 2] = skew
@@ -26,7 +23,7 @@ function compute_projection_matrix(fx, fy, cx, cy, near, far, skew=0f0)
 end
 
 function compute_ortho_matrix(left, right, bottom, top, near, far)
-    ortho = eye(4)
+    ortho = I4(Float32)
     ortho[1, 1] = 2f0 / (right-left)
     ortho[2, 2] = 2f0 / (top-bottom)
     ortho[3, 3] = - 2f0 / (far - near)
@@ -45,31 +42,14 @@ function perspective_matrix(width, height, fx, fy, cx, cy, near, far)
 end
 
 include("shaders.jl")
-include("file_utils.jl")
 
 ############
 # Renderer #
 ############
 
-struct Camera
-    width::Int
-    height::Int
-    fx::Float32
-    fy::Float32
-    cx::Float32
-    cy::Float32
-    near::Float32
-    far::Float32
-    skew::Float32
-end
-
-function Camera(width, height; fx=width, fy=height, cx=width/2, cy=height/2, near=0.001, far=100., skew=0)
-    Camera(width, height, fx, fy, cx, cy, near, far, skew)
-end
-
 mutable struct Renderer
     window::GLFW.Window
-    cam::Camera
+    cam::CameraIntrinsics
     compute_depth_shader::GLuint
     show_depth_shader::GLuint
     depth_texture::GLuint
@@ -77,6 +57,7 @@ mutable struct Renderer
     pos_attr::Int
     depth_image::Matrix{Float32}
     perspective_matrix::Matrix{Float32}
+    mesh_vaos::Dict{TriangleMesh,GLuint}
 end
 
 function setup_for_show_in_window()
@@ -117,7 +98,7 @@ function setup_for_show_in_window()
     (depth_texture[]::GLuint, show_depth_vao[]::GLuint, show_depth_shader)
 end
 
-function Renderer(cam::Camera)
+function Renderer(cam::CameraIntrinsics)
 
     # GLFW window
     window_hint = [
@@ -158,7 +139,8 @@ function Renderer(cam::Camera)
     Renderer(
         window, cam, compute_depth_shader, show_depth_shader,
         depth_texture, show_depth_vao, pos_attr,
-        Matrix{Float32}(undef, cam.width, cam.height), p)
+        Matrix{Float32}(undef, cam.width, cam.height), p,
+        Dict{TriangleMesh,GLuint}())
 end
 
 function destroy!(r::Renderer)
@@ -196,15 +178,12 @@ function get_depth_image!(renderer::Renderer; show_in_window=false)
     depth_image
 end
 
-struct Mesh
-    vao::GLuint
-    n_triangles::Int
-    renderer::Renderer
-end
-
-function add_mesh!(renderer::Renderer, vertices, indices)
+function register_mesh!(renderer::Renderer, mesh::TriangleMesh)
     # vertices should be 3xN
-    @assert size(vertices)[1] == 3
+    @assert size(mesh.vertices)[1] == 3
+
+    # indices should be 3XM
+    @assert size(mesh.indices)[1] == 3
 
     # TODO allow to change vertex data
 
@@ -217,13 +196,13 @@ function add_mesh!(renderer::Renderer, vertices, indices)
     vbo = Ref(GLuint(0))
     glGenBuffers(1, vbo)
     glBindBuffer(GL_ARRAY_BUFFER, vbo[])
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), Ref(vertices, 1), GL_STATIC_DRAW)
+    glBufferData(GL_ARRAY_BUFFER, sizeof(mesh.vertices), Ref(mesh.vertices, 1), GL_STATIC_DRAW)
 
     # element buffer object for indices
     ebo = Ref(GLuint(0))
     glGenBuffers(1, ebo)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo[])
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), Ref(indices, 1), GL_STATIC_DRAW)
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(mesh.indices), Ref(mesh.indices, 1), GL_STATIC_DRAW)
     
     # set vertex attribute pointers
     glVertexAttribPointer(renderer.pos_attr, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(Float32), C_NULL)
@@ -232,41 +211,28 @@ function add_mesh!(renderer::Renderer, vertices, indices)
     # unbind it
     glBindVertexArray(0)
     
-    n_triangles = div(length(indices), 3)
-    Mesh(vao[], n_triangles, renderer)
+    renderer.mesh_vaos[mesh] = vao[]
+    nothing
 end
 
-function load_mesh_data(fname)
-    (vertices, indices) = load_mesh(fname)
-    @assert size(vertices)[1] == 3
-    (vertices, indices)
-end
-
-function draw!(renderer::Renderer, mesh::Mesh, model::Matrix{Float32}, view::Matrix{Float32})
-    @assert mesh.renderer === renderer
+function draw!(renderer::Renderer, mesh::TriangleMesh, model::Matrix{Float32}, view::Matrix{Float32})
+    if !haskey(renderer.mesh_vaos, mesh)
+        error("mesh not registered")
+    end
+    vao = renderer.mesh_vaos[mesh]
     mvp = renderer.perspective_matrix * view * model
-    glUseProgram(mesh.renderer.compute_depth_shader)
+    glUseProgram(renderer.compute_depth_shader)
     glUniformMatrix4fv(0, 1, GL_FALSE, Ref(mvp, 1))
-    glBindVertexArray(mesh.vao)
-    glDrawElements(GL_TRIANGLES, mesh.n_triangles * 3, GL_UNSIGNED_INT, C_NULL)
+    glBindVertexArray(vao)
+    glDrawElements(GL_TRIANGLES, num_triangles(mesh) * 3, GL_UNSIGNED_INT, C_NULL)
     glBindVertexArray(0)
 end
 
-###############
-# scene graph #
-###############
+######################
+# draw a scene graph #
+######################
 
-mutable struct Node
-    mesh::Union{Nothing,Mesh}
-    transform::Matrix{Float32}
-    children::Vector{Node}
-end
-
-function Node(;transform::Matrix{Float32}=eye(4), children::Vector{Node}=Node[], mesh=nothing)
-    Node(mesh, transform, children)
-end
-
-function draw!(r::Renderer, node::Node, model::Matrix{Float32}, view::Matrix{Float32})
+function draw!(r::Renderer, node::SceneGraphNode, model::Matrix{Float32}, view::Matrix{Float32})
     model = model * node.transform
     if !isnothing(node.mesh)
         draw!(r, node.mesh, model, view)
@@ -276,7 +242,6 @@ function draw!(r::Renderer, node::Node, model::Matrix{Float32}, view::Matrix{Flo
     end
 end
 
-export Camera, Renderer, add_mesh!, load_mesh_data, Node, draw!, get_depth_image!, destroy!
-export eye
+export Renderer, register_mesh!, draw!, get_depth_image!, destroy!
 
 end # module Renderer
