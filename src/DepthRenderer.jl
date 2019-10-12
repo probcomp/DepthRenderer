@@ -244,4 +244,23 @@ end
 
 export Renderer, register_mesh!, draw!, get_depth_image!, destroy!
 
+################
+# depth images #
+################
+
+import FileIO
+import FixedPointNumbers
+import ColorTypes
+
+function save_depth_image(depth_measurement::Matrix{UInt16}, fname::String)
+    img = collect(reinterpret(FixedPointNumbers.Normed{UInt16,16}, depth_measurement'))
+    FileIO.save(fname, img)
+end
+
+function load_depth_image(fname::String)
+    collect(reinterpret(UInt16, ColorTypes.red.(FileIO.load(fname))))
+end
+
+export save_depth_image, load_depth_image
+
 end # module Renderer
