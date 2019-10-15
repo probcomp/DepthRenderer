@@ -110,8 +110,8 @@ function Renderer(cam::CameraIntrinsics)
         (GLFW.BLUE_BITS,    8),
         (GLFW.STENCIL_BITS, 0),
         (GLFW.AUX_BUFFERS,  0),
-        (GLFW.CONTEXT_VERSION_MAJOR, 4),
-        (GLFW.CONTEXT_VERSION_MINOR, 0),
+        (GLFW.CONTEXT_VERSION_MAJOR, 3),
+        (GLFW.CONTEXT_VERSION_MINOR, 3),
         (GLFW.OPENGL_PROFILE, GLFW.OPENGL_CORE_PROFILE),
         (GLFW.OPENGL_FORWARD_COMPAT, GL_TRUE),
     ]
