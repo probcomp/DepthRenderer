@@ -2,6 +2,7 @@ using FileIO
 using DepthRenderer
 using Geometry: CameraIntrinsics, I4, TriangleMesh, SceneGraphNode
 using Test
+using Printf: @sprintf
 
 width = 20
 height = 20
@@ -105,3 +106,18 @@ end
 @test isapprox(depth_image[div(width, 2), height-1], 2.0, atol=1e-3) # triangle 2 (top middle)
 @test isapprox(depth_image[div(width, 2), div(height, 2)], 1.0, atol=1e-3) # triangle 1 (center)
 @test isapprox(depth_image[width, height], 4.0, atol=1e-3) # triangle 3 (upper right corner)
+
+###################################
+# test round trip image save/load #
+###################################
+
+depth_meas = rand(UInt16, 10, 5)
+fname = "$(tempname()).png"
+save_depth_image(depth_meas, fname)
+loaded_meas = load_depth_image(fname)
+rm(fname)
+@test depth_meas == loaded_meas
+
+
+
+

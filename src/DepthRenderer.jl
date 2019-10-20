@@ -258,7 +258,7 @@ function save_depth_image(depth_measurement::Matrix{UInt16}, fname::String)
 end
 
 function load_depth_image(fname::String)
-    collect(reinterpret(UInt16, ColorTypes.red.(FileIO.load(fname))))
+    Matrix{UInt16}(collect(reinterpret(UInt16, ColorTypes.red.(FileIO.load(fname))))')
 end
 
 export save_depth_image, load_depth_image
