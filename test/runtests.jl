@@ -118,6 +118,3 @@ loaded_meas = load_depth_image(fname)
 rm(fname)
 @test depth_meas == loaded_meas
 
-
-
-
