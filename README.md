@@ -1,25 +1,60 @@
-# drender
+# DepthRenderer
 
-Simple OpenGL renderer for Python with a simple SceneGraph. 
-- Pygame, pyglfw3 or offscreen window managers.
+Simple OpenGL-based depth renderer and scene graph.
 
+For a scene with three triangles, with x,y,z coordinates:
 
-## Installation
+Triangle 1 (1 unit from camera)
 ```
-pip install .
-```
-
-## Examples
-
-See `examples/` for Python and Julia example scripts.
-
-To run the Julia example, you need to first build the `PyCall` Julia package to use a Python environment in which `drender` is installed.
-Suppose you have installed `drender` into a Python virtual environment, and you have activated that environment.
-Then, run:
-```
-JULIA_PROJECT=. PYTHON=$(which python) julia -e 'using Pkg; Pkg.build("PyCall")'
+a = [-0.25, -0.25, -1]
+b = [0.25, -0.25, -1]
+c = [0.0, 0.25, -1]
 ```
 
-## Benchmark
+Triangle 2 (2 units from camera)
+```
+a = [-1, -1, -2]
+b = [1, -1, -2]
+c = [0, 1, -2]
+```
 
-On a recent laptop, we get roughly 8500 FPS for the pure Python script, and 4000 FPS for the Julia script that calls the Python renderer via PyCall, for 100x100 depth images of a single mesh with 524 faces.
+Triangle 3 (4 units from camera)
+```
+a = [1.5, 2, -4]
+b = [2, 2, -4]
+c = [2, 1.5, -4]
+```
+
+and with the far plane (`far`) set to 5 units, and `fx=width`, and `fy=height`, the depth image returned by `get_depth_image!` has the following format:
+```
+
+depth_image[row,col] is in distance units, with values:
+
+    row=1                              row=width
+
+ ^ 
+ |   5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 4 4   col=height
+ |   5 5 5 5 5 5 5 5 5 2 2 5 5 5 5 5 5 5 5 4 
+ |   5 5 5 5 5 5 5 5 5 2 2 5 5 5 5 5 5 5 5 5 
+ |   5 5 5 5 5 5 5 5 2 2 2 2 5 5 5 5 5 5 5 5 
+ |   5 5 5 5 5 5 5 5 2 2 2 2 5 5 5 5 5 5 5 5 
+ |   5 5 5 5 5 5 5 2 2 2 2 2 2 5 5 5 5 5 5 5 
+ |   5 5 5 5 5 5 5 2 2 1 1 2 2 5 5 5 5 5 5 5 
+ |   5 5 5 5 5 5 2 2 2 1 1 2 2 2 5 5 5 5 5 5 
+ Y   5 5 5 5 5 5 2 2 1 1 1 1 2 2 5 5 5 5 5 5 
+ |   5 5 5 5 5 2 2 2 1 1 1 1 2 2 2 5 5 5 5 5 
+ |   5 5 5 5 5 2 2 1 1 1 1 1 1 2 2 5 5 5 5 5 
+ |   5 5 5 5 2 2 2 1 1 1 1 1 1 2 2 2 5 5 5 5 
+ |   5 5 5 5 2 2 1 1 1 1 1 1 1 1 2 2 5 5 5 5 
+ |   5 5 5 2 2 2 1 1 1 1 1 1 1 1 2 2 2 5 5 5 
+ |   5 5 5 2 2 1 1 1 1 1 1 1 1 1 1 2 2 5 5 5 
+ |   5 5 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 5 5 
+ |   5 5 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 5 5 
+ |   5 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 5 
+ |   5 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 5 
+ |   2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2   col=1
+ | 
+ *----------------X------------------------->
+
+NOTE Z-axis is point towards camera (objects in front of camera have negative Z-coordinate)
+```
