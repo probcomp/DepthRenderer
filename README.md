@@ -1,6 +1,8 @@
 # DepthRenderer
 
-Simple OpenGL-based depth renderer and scene graph.
+Simple OpenGL-based depth renderer.
+
+Depends on the (Geometry)[https://github.com/probcomp/Geometry] package.
 
 For a scene with three triangles, with x,y,z coordinates:
 
