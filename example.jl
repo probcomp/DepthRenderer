@@ -52,9 +52,8 @@ function do_render_test(n::Int)
     for i=1:n
         println("i: $i")
         draw!(renderer, root, model, view)
-        depth_image = get_depth_image!(renderer; show_in_window=true)
-        depth_image = depth_image'[end:-1:1,:]
-        FileIO.save(@sprintf("imgs/depth-%04d.png", i), depth_image ./ maximum(depth_image))
+        depths = get_depth_image!(renderer; show_in_window=true)
+        normalize_and_save_depth_image(depths, 5.0, @sprintf("imgs/depth-%04d.png", i))
     end
 end
 
