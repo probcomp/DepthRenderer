@@ -249,8 +249,6 @@ export Renderer, register_mesh!, draw!, get_depth_image!, destroy!
 ###########
 
 import FileIO
-import FixedPointNumbers
-import ColorTypes
 
 function normalize_and_save_depth_image(depths::Matrix{Float64}, max_depth::Float64, fname::String)
     # clip and normalize depths
