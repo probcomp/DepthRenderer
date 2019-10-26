@@ -1,7 +1,5 @@
 import FileIO
 using Printf: @sprintf
-using Profile
-using ProfileView
 using Geometry: CameraIntrinsics, TriangleMesh, SceneGraphNode, Pose6D, to_matrix, I4
 
 using DepthRenderer
@@ -60,6 +58,9 @@ end
 @time do_render_test(10000)
 @time do_render_test(10000)
 
+# NOTE: This is commented out, so that ProfileView is not a dependency
+#using Profile
+#using ProfileView
 #Profile.clear()
 #@profile do_render_test(10000)
 #li, lidict = Profile.retrieve()
