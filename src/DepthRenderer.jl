@@ -34,8 +34,12 @@ function compute_ortho_matrix(left, right, bottom, top, near, far)
 end
 
 function perspective_matrix(width, height, fx, fy, cx, cy, near, far)
+    # (height-cy) is used instead of cy because of the difference between
+    # image coordinate systems between OpenCV and OpenGL. In the former,
+    # the origin is at the top-left of the image while in the latter the
+    # origin is at the bottom-left.
     proj_matrix = compute_projection_matrix(
-            fx, fy, cx, cy,
+            fx, fy, cx, (height-cy),
             near, far, 0.f0)
     ndc_matrix = compute_ortho_matrix(0, width, 0, height, near, far)
     ndc_matrix * proj_matrix
@@ -94,7 +98,7 @@ function setup_for_show_in_window()
         4 * sizeof(Float32), convert(Ptr{Cvoid}, 2 * sizeof(Float32)))
     glEnableVertexAttribArray(depth_tex_attr)
     glBindVertexArray(0)
-    
+
     (depth_texture[]::GLuint, show_depth_vao[]::GLuint, show_depth_shader)
 end
 
@@ -126,7 +130,7 @@ function Renderer(cam::CameraIntrinsics)
     glEnable(GL_DEPTH_TEST)
     glViewport(0, 0, cam.width, cam.height)
     glClear(GL_DEPTH_BUFFER_BIT)
- 
+
     # OpenGL setup for showing depth image in GLFW window
     (depth_texture, show_depth_vao, show_depth_shader) = setup_for_show_in_window()
 
@@ -203,14 +207,14 @@ function register_mesh!(renderer::Renderer, mesh::TriangleMesh)
     glGenBuffers(1, ebo)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo[])
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(mesh.indices), Ref(mesh.indices, 1), GL_STATIC_DRAW)
-    
+
     # set vertex attribute pointers
     glVertexAttribPointer(renderer.pos_attr, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(Float32), C_NULL)
     glEnableVertexAttribArray(renderer.pos_attr)
 
     # unbind it
     glBindVertexArray(0)
-    
+
     renderer.mesh_vaos[mesh] = vao[]
     nothing
 end
